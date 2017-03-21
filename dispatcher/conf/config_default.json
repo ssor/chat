@@ -1,0 +1,8 @@
+{
+    "listeningPort": "8092",
+    "mode": "debug",
+    "redisHost": ":6379",
+    "mongoHost": "127.0.0.1",
+    "dbName": "xsb",
+    "nsqHost": "127.0.0.1:4161",
+}

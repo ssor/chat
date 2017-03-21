@@ -1,0 +1,13 @@
+{
+    "mongoHost": "127.0.0.1",
+    "dbName": "xsb",
+    "domain": "",
+    "mode": "debug",
+    "files": "files/",
+    "redisHost": ":6379",
+    "nodeLanHost": "127.0.0.1",
+    "nodeWanHost": "127.0.0.1",
+    "registerCenterHost": "127.0.0.1:8092",
+    "nodeCapability": 1,
+    "staticServerHost": "http://192.168.10.192"
+}

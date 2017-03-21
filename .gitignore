@@ -1,0 +1,9 @@
+#.gitignore
+.DS_Store
+node/release/
+dispatcher/release/
+node/chatFiles/**/*.*
+node/conf/*.*
+dispatcher/conf/*.*
+!node/conf/config_default.json
+!dispatcher/conf/config_default.json
