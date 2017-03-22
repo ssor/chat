@@ -2,7 +2,7 @@ package main
 
 import (
 	"time"
-	"xsbPro/chatServer/controllers"
+	"xsbPro/chat/node/controllers"
 	"xsbPro/common"
 	log "xsbPro/log"
 

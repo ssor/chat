@@ -1,14 +1,12 @@
 package dispatcher
 
 import (
-	"xsbPro/chatDispatcher/lua"
+	"xsbPro/chat/lua"
 	"xsbPro/log"
 
 	"encoding/json"
 
 	"strings"
-
-	"github.com/ssor/redigo/redis"
 )
 
 type SearchResult struct {
@@ -21,24 +19,25 @@ type SearchResultArray []*SearchResult
 
 func SearchGroupName(group string, scriptExecutor ScriptExecutor) (SearchResultArray, error) {
 
-	args := redis.Args{}
-	res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_get_all_groups], args...)
+	// args := redis.Args{}
+	// res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_get_all_groups], args...)
+	res, err := lua.GetAllGroups(lua.ScriptExecutor(scriptExecutor))
 	if err != nil {
 		log.SysF("GetAllGroups error: %s", err)
 		return nil, err
 	}
 	results := SearchResultArray{}
-	var all_results SearchResultArray
-	err = json.Unmarshal(res.([]uint8), &all_results)
+	var allResults SearchResultArray
+	err = json.Unmarshal(res.([]uint8), &allResults)
 	if err != nil {
 		log.SysF("SearchGroupName error: %s", err)
 		log.InfoF("-> %s", string(res.([]uint8)))
 		return nil, err
 	}
 	log.TraceF("%s", string(res.([]uint8)))
-	log.TraceF("got %d groups from db", len(all_results))
-	if len(all_results) > 0 {
-		for _, result := range all_results {
+	log.TraceF("got %d groups from db", len(allResults))
+	if len(allResults) > 0 {
+		for _, result := range allResults {
 			// log.TraceF("name: %s ", result.GroupName)
 			if strings.Contains(result.GroupName, group) {
 				result.Node = strings.Replace(result.Node, "node->", "", 1)

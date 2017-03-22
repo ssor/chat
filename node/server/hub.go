@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 	"time"
-	"xsbPro/chatDispatcher/lua"
+	"xsbPro/chat/lua"
 	db "xsbPro/xsbdb"
 )
 
@@ -89,20 +89,20 @@ func (h *Hub) close() {
 }
 
 func (h *Hub) RefreshUsers(scriptExecutor lua.ScriptExecutor) error {
-	users, err := lua.GetGroupUsersFromCache(h.group, scriptExecutor)
+	users, err := lua.GetGroupUsers(h.group, scriptExecutor)
 	if err != nil {
 		return err
 	}
 
 	//new user added to this group
-	for _, db_user := range users {
-		if h.FindUser(db_user.ID) == nil {
-			nu := NewUser(NewRealUserInfo(db_user), h)
-			h.GroupUsers.Set(db_user.ID, nu)
+	for _, dbUser := range users {
+		if h.FindUser(dbUser.ID) == nil {
+			nu := NewUser(NewRealUserInfo(dbUser), h)
+			h.GroupUsers.Set(dbUser.ID, nu)
 		}
 	}
 	//some user removed from this group
-	find_user := func(users db.UserArray, id string) *db.User {
+	findUser := func(users db.UserArray, id string) *db.User {
 		for _, user := range users {
 			if user.ID == id {
 				return user
@@ -111,7 +111,7 @@ func (h *Hub) RefreshUsers(scriptExecutor lua.ScriptExecutor) error {
 		return nil
 	}
 	for _, user := range h.GroupUsers.Items() {
-		if find_user(users, user.User.GetUserID()) == nil {
+		if findUser(users, user.User.GetUserID()) == nil {
 			user.conn.Close("REMOVED_FROM_GROUP", 3*time.Second)
 			h.GroupUsers.Delete(user.User.GetUserID())
 		}
@@ -124,13 +124,13 @@ func (h *Hub) acceptInterview(questionnaire *Questionnaire) {
 	h.investigate <- questionnaire
 }
 
-func contains_string(slice []string, s string) bool {
+func containsString(slice []string, s string) bool {
 	if slice == nil {
 		return false
 	}
 
-	for _, in_s := range slice {
-		if in_s == s {
+	for _, inS := range slice {
+		if inS == s {
 			return true
 		}
 	}
@@ -150,7 +150,7 @@ func (h *Hub) NewMessage(m *Message, destUsers []string) error {
 		if destUsers == nil { //为空时默认为全部
 			u.AddRecord(m)
 		} else {
-			if contains_string(destUsers, u.User.GetUserID()) {
+			if containsString(destUsers, u.User.GetUserID()) {
 				u.AddRecord(m)
 			}
 		}
@@ -197,7 +197,7 @@ func (h *Hub) getReceivers() []string {
 }
 
 func (h *Hub) run() {
-	ticker_hour := time.NewTicker(1 * time.Hour)
+	tickerHour := time.NewTicker(1 * time.Hour)
 	for {
 		select {
 		case questionnare := <-h.investigate:
@@ -223,7 +223,7 @@ func (h *Hub) run() {
 				// h.clearMessageRecords()
 				// go h.broadcastMessage(h.connections.Filter(nil))
 			}
-		case <-ticker_hour.C:
+		case <-tickerHour.C:
 			//hub 内部逻辑处理
 			now := time.Now()
 			//如果非活动状态持续时间超过72小时,则将其删除

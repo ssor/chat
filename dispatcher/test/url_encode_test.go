@@ -26,14 +26,14 @@ func NewResponse(code int, message string, data interface{}) *Response {
 
 //返回给客户端的登录信息
 type LoginInfo struct {
-	Url   string   `json:"url"`
+	URL   string   `json:"url"`
 	Hosts []string `json:"hosts"`
 	// Host string
 }
 
 func NewLoginInfo(url string, hosts []string) *LoginInfo {
 	return &LoginInfo{
-		Url:   url,
+		URL:   url,
 		Hosts: hosts,
 	}
 }
@@ -58,7 +58,7 @@ func TestUrlEncoding(t *testing.T) {
 		hosts := []string{"ws://"}
 		res := NewResponse(0, "", NewLoginInfo(url, hosts))
 		bs, err := JSONMarshal(res, true)
-		Panic_error(err)
+		panicError(err)
 		So(len(bs), ShouldNotEqual, 0)
 		So(strings.Contains(string(bs), `\u0026`), ShouldEqual, false)
 	})
@@ -68,16 +68,16 @@ func TestSplitKey(t *testing.T) {
 	Convey("TestSplitKey", t, func() {
 
 		key := `group->1459828066_1459951271326749291,node->172.16.1.35:8082,wan->dev.chat.dyxsb.net:8082`
-		group_node_wan := strings.Split(key, ",")
-		So(len(group_node_wan), ShouldEqual, 3)
-		node_host := strings.Split(group_node_wan[1], "->")
-		So(len(node_host), ShouldEqual, 2)
-		wan_host := strings.Split(group_node_wan[2], "->")
-		So(len(wan_host), ShouldEqual, 2)
+		groupNodeWan := strings.Split(key, ",")
+		So(len(groupNodeWan), ShouldEqual, 3)
+		nodeHost := strings.Split(groupNodeWan[1], "->")
+		So(len(nodeHost), ShouldEqual, 2)
+		wanHost := strings.Split(groupNodeWan[2], "->")
+		So(len(wanHost), ShouldEqual, 2)
 	})
 }
 
-func Panic_error(err error) {
+func panicError(err error) {
 	if err != nil {
 		panic(err.Error())
 	}

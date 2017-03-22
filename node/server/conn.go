@@ -19,7 +19,7 @@ import (
 
 var (
 	errSocketSendFailed = errors.New("socket error")
-	err_buffer_full     = errors.New("buffer full")
+	errBufferFull       = errors.New("buffer full")
 )
 
 type ReportObject interface {
@@ -36,11 +36,9 @@ type Socket interface {
 
 // Connection is an middleman between the websocket connection and the hub.
 type Connection struct {
-	// The websocket connection.
-	// ws *websocket.Conn
 	ws               Socket
 	reportObj        ReportObject
-	send_msg_buffer  chan *messageRecord // Buffered channel of outbound messages.
+	sendMsgBuffer    chan *messageRecord // Buffered channel of outbound messages.
 	uid              string
 	peacefullyClosed bool
 	mutex            *sync.Mutex //防止 send_msg_buffer 关闭后让发送信息
@@ -48,14 +46,15 @@ type Connection struct {
 
 func NewConnection(ws Socket, reportObj ReportObject, uid string) *Connection {
 	return &Connection{
-		ws:              ws,
-		send_msg_buffer: make(chan *messageRecord),
-		reportObj:       reportObj,
-		uid:             uid + "_" + strconv.FormatInt(time.Now().UnixNano(), 16),
-		mutex:           &sync.Mutex{},
+		ws:            ws,
+		sendMsgBuffer: make(chan *messageRecord),
+		reportObj:     reportObj,
+		uid:           uid + "_" + strconv.FormatInt(time.Now().UnixNano(), 16),
+		mutex:         &sync.Mutex{},
 	}
 }
 
+// GetID return conn's unique id
 func (c *Connection) GetID() string {
 	return c.uid
 }
@@ -63,19 +62,19 @@ func (c *Connection) GetID() string {
 func (c *Connection) Send(m *messageRecord) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	if c.send_msg_buffer != nil {
+	if c.sendMsgBuffer != nil {
 		select {
-		case c.send_msg_buffer <- m:
+		case c.sendMsgBuffer <- m:
 		default:
 			// close(c.send)
 			// return errSocketSendFailed
-			return err_buffer_full
+			return errBufferFull
 		}
 	}
 	return nil
 }
 
-// readPump pumps messages from the websocket connection to the hub.
+// ReadPump pumps messages from the websocket connection to the hub.
 func (c *Connection) ReadPump() {
 	defer func() {
 		// c.Hub.unregisterConn(c)
@@ -110,7 +109,7 @@ func (c *Connection) write(mt int, payload []byte, writeDuration time.Duration) 
 	return c.ws.WriteMessage(mt, payload)
 }
 
-// writePump pumps messages from the hub to the websocket connection.
+// WritePump pumps messages from the hub to the websocket connection.
 func (c *Connection) WritePump(pingPeriod time.Duration, writeDuration time.Duration) {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
@@ -123,7 +122,7 @@ func (c *Connection) WritePump(pingPeriod time.Duration, writeDuration time.Dura
 
 	for {
 		select {
-		case message, ok := <-c.send_msg_buffer:
+		case message, ok := <-c.sendMsgBuffer:
 			if !ok { //服务端主动关闭
 				c.peacefullyClosed = true
 				c.write(websocket.CloseMessage, []byte{}, writeDuration)
@@ -140,6 +139,7 @@ func (c *Connection) WritePump(pingPeriod time.Duration, writeDuration time.Dura
 	}
 }
 
+// Close close conn
 func (c *Connection) Close(msg string, writeDuration time.Duration) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -153,16 +153,16 @@ func (c *Connection) Close(msg string, writeDuration time.Duration) {
 	}
 	c.ws.Close()
 	// c.ws = nil
-	if c.send_msg_buffer != nil {
+	if c.sendMsgBuffer != nil {
 		select {
-		case _, open := <-c.send_msg_buffer:
+		case _, open := <-c.sendMsgBuffer:
 			if open {
-				close(c.send_msg_buffer)
+				close(c.sendMsgBuffer)
 			}
 		default:
-			close(c.send_msg_buffer)
+			close(c.sendMsgBuffer)
 		}
 
-		c.send_msg_buffer = nil
+		c.sendMsgBuffer = nil
 	}
 }

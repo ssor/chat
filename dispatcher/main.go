@@ -1,9 +1,8 @@
 package main
 
 import (
-	"xsbPro/chatDispatcher/controller"
-
 	"flag"
+	"xsbPro/chat/dispatcher/controller"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ssor/config"

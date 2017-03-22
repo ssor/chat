@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"xsbPro/chatDispatcher/dispatcher"
-	"xsbPro/chatDispatcher/lua"
-	"xsbPro/chatDispatcher/resource"
+	"xsbPro/chat/dispatcher/dispatcher"
+	"xsbPro/chat/dispatcher/resource"
+	"xsbPro/chat/lua"
 	"xsbPro/common"
 	"xsbPro/log"
 
@@ -30,7 +30,7 @@ func Init(c config.IConfigInfo) {
 
 	resource.Init(conf)
 
-	dispatcher.Init(conf, resource.Redis_instance.DoScript, resource.Redis_instance.RedisDo)
+	dispatcher.Init(conf, resource.RedisInstance.DoScript, resource.RedisInstance.RedisDo)
 
 	//当支部发生变化时的处理
 	//1. 新添加了支部    -> 添加新支部信息,更新支部人员信息,更新人员和支部关系,只需分配节点
@@ -62,13 +62,13 @@ func updateUsersOfGroup(msg *nsq.Message) error {
 		return err
 	}
 
-	err = updateUsersOfGroupToDB(conf.Get("dbName").(string), ins.Data, resource.Redis_instance.RedisDoMulti)
+	err = updateUsersOfGroupToDB(conf.Get("dbName").(string), ins.Data, resource.RedisInstance.RedisDoMulti)
 	if err != nil {
 		log.SysF("updateUsersOfGroup err: %s", err)
 		return err
 	}
 	//notify node to remove group
-	err = dispatcher.NotifyNodeDataRefresh(dispatcher.Datarefresh_update_users_of_group, ins.Data, resource.Redis_instance.RedisDo)
+	err = dispatcher.NotifyNodeDataRefresh(dispatcher.DataRefreshUpdateUsersOfGroup, ins.Data, resource.RedisInstance.RedisDo)
 	if err != nil {
 		log.SysF("updateUsersOfGroup err: %s", err)
 		return err
@@ -80,8 +80,8 @@ func updateUsersOfGroupToDB(dbName, group string, cmdsExecutor func(*common.Redi
 	waitForDbConnection.Lock()
 	defer waitForDbConnection.Unlock()
 
-	session, err := resource.Mongo_pool.GetSession()
-	defer resource.Mongo_pool.ReturnSession(session, err)
+	session, err := resource.MongoPool.GetSession()
+	defer resource.MongoPool.ReturnSession(session, err)
 	if err != nil {
 		return err
 	}
@@ -105,16 +105,16 @@ func updateUser(msg *nsq.Message) error {
 	}
 	switch ins.Type {
 	case "add", "update":
-		// session := resource.Mongo_pool.GetSession()
-		// defer resource.Mongo_pool.ReturnSession(session)
-		// err = dispatcher.AddUsers(session, conf.GetDbName(), bson.M{"_id": ins.Data}, resource.Redis_instance.RedisDoMulti)
-		err = updateUserToDB(conf.Get("dbName").(string), bson.M{"_id": ins.Data}, resource.Redis_instance.RedisDoMulti)
+		// session := resource.MongoPool.GetSession()
+		// defer resource.MongoPool.ReturnSession(session)
+		// err = dispatcher.AddUsers(session, conf.GetDbName(), bson.M{"_id": ins.Data}, resource.RedisInstance.RedisDoMulti)
+		err = updateUserToDB(conf.Get("dbName").(string), bson.M{"_id": ins.Data}, resource.RedisInstance.RedisDoMulti)
 		if err != nil {
 			log.SysF("update user err: %s", err)
 			return err
 		}
 	case "remove":
-		err = dispatcher.RemoveUsersFromRedis([]string{ins.Data}, resource.Redis_instance.RedisDoMulti)
+		err = lua.RemoveUsersFromRedis([]string{ins.Data}, resource.RedisInstance.RedisDoMulti)
 		if err != nil {
 			log.SysF("update user err: %s", err)
 			return err
@@ -127,8 +127,8 @@ func updateUserToDB(dbName string, query interface{}, cmdsExecutor func(*common.
 	waitForDbConnection.Lock()
 	defer waitForDbConnection.Unlock()
 
-	session, err := resource.Mongo_pool.GetSession()
-	defer resource.Mongo_pool.ReturnSession(session, err)
+	session, err := resource.MongoPool.GetSession()
+	defer resource.MongoPool.ReturnSession(session, err)
 	if err != nil {
 		return err
 	}
@@ -152,21 +152,21 @@ func updateGroup(msg *nsq.Message) error {
 	}
 	switch ins.Type {
 	case "add":
-		// session := resource.Mongo_pool.GetSession()
-		// defer resource.Mongo_pool.ReturnSession(session)
-		// err = dispatcher.AddNewGroup(session, conf.GetDbName(), ins.Data, resource.Redis_instance.RedisDoMulti, resource.Redis_instance.DoScript)
-		err = addNewGroupToDB(conf.Get("dbName").(string), ins.Data, resource.Redis_instance.RedisDoMulti, resource.Redis_instance.DoScript)
+		// session := resource.MongoPool.GetSession()
+		// defer resource.MongoPool.ReturnSession(session)
+		// err = dispatcher.AddNewGroup(session, conf.GetDbName(), ins.Data, resource.RedisInstance.RedisDoMulti, resource.RedisInstance.DoScript)
+		err = addNewGroupToDB(conf.Get("dbName").(string), ins.Data, resource.RedisInstance.RedisDoMulti, resource.RedisInstance.DoScript)
 		if err != nil {
 			log.SysF("updateGroup err: %s", err)
 			return err
 		}
 	case "remove":
-		err = lua.RemoveGroupFromRedis(ins.Data, resource.Redis_instance.DoScript)
+		err = lua.RemoveGroup(ins.Data, resource.RedisInstance.DoScript)
 		if err != nil {
 			return err
 		}
 		//notify node to remove group
-		err = dispatcher.NotifyNodeDataRefresh(dispatcher.Datarefresh_remove_group, ins.Data, resource.Redis_instance.RedisDo)
+		err = dispatcher.NotifyNodeDataRefresh(dispatcher.DataRefreshRemoveGroup, ins.Data, resource.RedisInstance.RedisDo)
 		if err != nil {
 			log.SysF("updateGroup err: %s", err)
 			return err
@@ -180,8 +180,8 @@ func addNewGroupToDB(dbName, groupID string, cmdsExecutor func(*common.RedisComm
 	waitForDbConnection.Lock()
 	defer waitForDbConnection.Unlock()
 
-	session, err := resource.Mongo_pool.GetSession()
-	defer resource.Mongo_pool.ReturnSession(session, err)
+	session, err := resource.MongoPool.GetSession()
+	defer resource.MongoPool.ReturnSession(session, err)
 	if err != nil {
 		return err
 	}

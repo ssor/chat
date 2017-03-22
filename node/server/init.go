@@ -19,17 +19,17 @@ var (
 )
 
 var (
-	max_user_unactive_duration    = 24 * time.Hour     //user 最长非活动时长,超过该时长则需要确认该 user 是否还在支部中
-	max_chat_log_reserve_duration = 24 * 3 * time.Hour //聊天记录最长保存时间
+	maxUserUnactiveDuration   = 24 * time.Hour     //user 最长非活动时长,超过该时长则需要确认该 user 是否还在支部中
+	maxChatLogReserveDuration = 24 * 3 * time.Hour //聊天记录最长保存时间
 	// interval_check_node_registered_status       = 1 * time.Minute
 	defaultMaxMemory int64 = 5 << 20 // 32 MB
 
-	upload_static_image_file_url string
-	upload_static_audio_file_url string
+	uploadStaticImageFileURL string
+	uploadStaticAudioFileURL string
 
 	hubManager *HubManager
 
-	node_id = ""
+	nodeID = ""
 )
 
 func init() {
@@ -37,11 +37,11 @@ func init() {
 	go hubManager.Run()
 }
 
-func Init(conf common.IConfigInfo, _node_id string) {
-	upload_static_image_file_url = conf.GetStaticFileServer() + "/api/v1/image/upload?type=chat&uid=%s&para=%s"
-	upload_static_audio_file_url = conf.GetStaticFileServer() + "/api/v1/audio/upload?uid=%s&para=%s"
+func Init(conf common.IConfigInfo, _nodeID string) {
+	uploadStaticImageFileURL = conf.GetStaticFileServer() + "/api/v1/image/upload?type=chat&uid=%s&para=%s"
+	uploadStaticAudioFileURL = conf.GetStaticFileServer() + "/api/v1/audio/upload?uid=%s&para=%s"
 
-	node_id = _node_id
+	nodeID = _nodeID
 }
 func keepNodeRegisteredInCenter() {
 

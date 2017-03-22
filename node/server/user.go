@@ -85,19 +85,19 @@ func (u *User) onLine() bool {
 	return u.User.IsFake() == false && u.conn != nil
 }
 
-func (user *User) broadcastMessage() {
-	conn := user.conn
+func (u *User) broadcastMessage() {
+	conn := u.conn
 	if conn == nil {
 		return
 	}
 
-	if len(user.MessageRecords) <= 0 {
+	if len(u.MessageRecords) <= 0 {
 		return
 	}
 
-	user.clearMessageRecords()
+	u.clearMessageRecords()
 
-	for _, mr := range user.MessageRecords {
+	for _, mr := range u.MessageRecords {
 		// if mr.SendState == msg_state_default {
 		err := conn.Send(mr)
 		if err != nil {
@@ -110,25 +110,25 @@ func (user *User) broadcastMessage() {
 	}
 }
 
-func (user *User) clearMessageRecords() {
-	if len(user.MessageRecords) <= 0 {
+func (u *User) clearMessageRecords() {
+	if len(u.MessageRecords) <= 0 {
 		return
 	}
 	//如果第一条消息是回执消息,说明排名第二的消息已经被收到,应该清除前两条消息
-	if user.MessageRecords[0].Protocal == protoReply {
-		if len(user.MessageRecords) < 2 { //有回执,但没消息说明有错误发生
-			user.MessageRecords = MessageRecordArray{}
+	if u.MessageRecords[0].Protocal == protoReply {
+		if len(u.MessageRecords) < 2 { //有回执,但没消息说明有错误发生
+			u.MessageRecords = MessageRecordArray{}
 			return
 		}
 
-		user.MessageRecords = user.MessageRecords[2:]
+		u.MessageRecords = u.MessageRecords[2:]
 	}
 
 	// nowSeconds := time.Now().Unix()
 	secondsOf3DaysAgo := time.Now().AddDate(0, 0, -3).UnixNano()
 
 	list := MessageRecordArray{}
-	for _, r := range user.MessageRecords {
+	for _, r := range u.MessageRecords {
 		// if r.Timestamp > secondsOf3DaysAgo && r.SendState != msg_state_sent {
 		if r.Timestamp > secondsOf3DaysAgo {
 			list = append(list, r)
@@ -138,10 +138,10 @@ func (user *User) clearMessageRecords() {
 		// 	list = append(list, r)
 		// }
 	}
-	if len(list) != len(user.MessageRecords) {
-		log.TraceF("user %s  %d records to send", user.User.GetUserName(), len(list))
+	if len(list) != len(u.MessageRecords) {
+		log.TraceF("user %s  %d records to send", u.User.GetUserName(), len(list))
 	}
-	user.MessageRecords = list
+	u.MessageRecords = list
 }
 
 //new conn set
@@ -239,7 +239,7 @@ func (u *User) AddRecord(m *Message) {
 		return
 	}
 
-	r := NewMessageRecord(m)
+	r := newMessageRecord(m)
 	switch m.Protocal {
 	// case protoLogout: //, protoLogin
 	// u.MessageRecords = append(MessageRecordArray{r}, u.MessageRecords...)
@@ -253,29 +253,3 @@ func (u *User) AddRecord(m *Message) {
 		u.MessageRecords = u.MessageRecords[:maxMessageCountCache]
 	}
 }
-
-// // UserList use
-// type UserList map[string]*User
-
-// type UserArray []*User
-
-// func (ul UserList) FilterByGroup(group string) UserList {
-// 	list := make(UserList)
-
-// 	for id, u := range ul {
-// 		if u.Group == group {
-// 			list[id] = u
-// 		}
-// 	}
-
-// 	return list
-// }
-
-// // GetIDMap use
-// func (ul UserList) GetIDMap() map[string]bool {
-// 	msu := make(map[string]bool)
-// 	for _, ui := range ul {
-// 		msu[ui.ID] = true
-// 	}
-// 	return msu
-// }

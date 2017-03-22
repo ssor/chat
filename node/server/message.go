@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	// "chatServer/libs/log"
 	"time"
 )
 
@@ -18,7 +17,7 @@ var (
 	protoReply = 6
 	protoBot   = 888
 
-	protoCloseLoginOnOtherDevice string = "loginOnOtherDevice" //server close conn and do not want client to reconnect in short time
+	protoCloseLoginOnOtherDevice = "loginOnOtherDevice" //server close conn and do not want client to reconnect in short time
 )
 
 type Message struct {

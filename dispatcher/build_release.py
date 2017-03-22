@@ -48,7 +48,7 @@ def hasHidePath(path):
 
 
 # set files and paths that should be exclued from release files
-ignoredDirs = ["controller", "libs", "models", "release", "tests", "api", "router", "core_manager", "files", "test"]
+ignoredDirs = ["controller", "release", "resource", "dispatcher", "test"]
 ignoredFiles = ["build_release.py", "main.go", "README.md", "conf/config.json"]
 
 

@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 	"time"
-	"xsbPro/chatDispatcher/lua"
+	"xsbPro/chat/lua"
 	"xsbPro/log"
 	"xsbPro/xsbAdmin/libs/tools"
 
@@ -42,7 +42,7 @@ var upgrader = websocket.Upgrader{
 }
 
 func RefreshAll(scriptExecutor lua.ScriptExecutor) error {
-	err := hubManager.refreshGroupsFromRedis(node_id, scriptExecutor)
+	err := hubManager.refreshGroupsFromRedis(nodeID, scriptExecutor)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func RemoveGroup(group string) error {
 	return hubManager.RemoveHub(group)
 }
 
-// RefreshGroup 更新 group 本身的删除 以及 group 内成员的变化
+// RefreshGroupUsers 更新 group 本身的删除 以及 group 内成员的变化
 func RefreshGroupUsers(group string, scriptExecutor lua.ScriptExecutor) error {
 	return hubManager.RefreshUsers(group, scriptExecutor)
 }
@@ -72,7 +72,7 @@ func NewUserRequest(groupID, userID string, c *gin.Context, scriptExecutor lua.S
 	hm := hubManager
 	hub := hm.Hubs.Get(groupID)
 	if hub == nil {
-		hub, err = hm.loadGroupFromRedis(groupID, node_id, scriptExecutor)
+		hub, err = hm.loadGroupFromRedis(groupID, nodeID, scriptExecutor)
 		if err != nil {
 			return err
 		}
@@ -168,7 +168,7 @@ func ImageUpload(groupID, userID, para string, c *gin.Context) {
 		return
 	}
 
-	res, body, err := tools.UploadFile(fmt.Sprintf(upload_static_image_file_url, userID, para), header1.Filename, nil, f)
+	res, body, err := tools.UploadFile(fmt.Sprintf(uploadStaticImageFileURL, userID, para), header1.Filename, nil, f)
 	if err != nil {
 		log.InfoF("upload image to server error: %s", err)
 		c.AbortWithError(http.StatusInternalServerError, errors.New("上传图片失败"))
@@ -178,7 +178,7 @@ func ImageUpload(groupID, userID, para string, c *gin.Context) {
 
 	type ImageUploadResponse struct {
 		State string `json:"state"`
-		Url   string `json:"url"`
+		URL   string `json:"url"`
 	}
 	var r ImageUploadResponse
 	err = json.Unmarshal(body, &r)
@@ -188,13 +188,13 @@ func ImageUpload(groupID, userID, para string, c *gin.Context) {
 		return
 	}
 
-	if len(r.Url) <= 0 {
+	if len(r.URL) <= 0 {
 		log.InfoF("upload image failed")
 		c.AbortWithError(http.StatusInternalServerError, errors.New("上传图片失败"))
 		return
 	}
 
-	message, err := NewImageMessage(ui.User, r.Url)
+	message, err := NewImageMessage(ui.User, r.URL)
 	// message, err := newImageMessage(ui, fileName)
 	if err != nil {
 		log.SysF("user %s add Image message error: %s", userID, err)
@@ -251,7 +251,7 @@ func AudioUpload(groupID, userID, para string, c *gin.Context) {
 		return
 	}
 
-	res, body, err := tools.UploadFile(fmt.Sprintf(upload_static_audio_file_url, userID, para), header1.Filename, nil, f)
+	res, body, err := tools.UploadFile(fmt.Sprintf(uploadStaticAudioFileURL, userID, para), header1.Filename, nil, f)
 	if err != nil {
 		log.InfoF("upload audio to server error: %s", err)
 		c.AbortWithError(http.StatusInternalServerError, errors.New("上传失败"))

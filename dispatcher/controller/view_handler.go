@@ -3,10 +3,9 @@ package controller
 import (
 	"net/http"
 
-	"xsbPro/chatDispatcher/dispatcher"
+	"xsbPro/chat/dispatcher/dispatcher"
+	"xsbPro/chat/dispatcher/resource"
 	"xsbPro/log"
-
-	"xsbPro/chatDispatcher/resource"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,7 +29,7 @@ func Search(c *gin.Context) {
 
 	if len(group) > 0 {
 		log.InfoF("search => %s", group)
-		results, err := dispatcher.SearchGroupName(group, resource.Redis_instance.DoScript)
+		results, err := dispatcher.SearchGroupName(group, resource.RedisInstance.DoScript)
 		if err != nil {
 			log.SysF("err: %s", err)
 			c.JSON(http.StatusOK, nil)

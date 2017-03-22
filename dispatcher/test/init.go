@@ -1,15 +1,14 @@
 package tests
 
 import (
-	dispatcher "xsbPro/chatDispatcher/dispatcher"
-	"xsbPro/chatDispatcher/lua"
-	"xsbPro/chatDispatcher/resource"
+	"xsbPro/chat/dispatcher/dispatcher"
+	"xsbPro/chat/dispatcher/resource"
 
-	"xsbPro/common"
+	"github.com/ssor/config"
 )
 
 var (
-	config_content = `{
+	configContent = `{
     "listeningPort": "8092",
     "mode": "debug",
     "redisHost": ":6379",
@@ -17,27 +16,24 @@ var (
     "dbName": "xsb_test",
 }`
 
-	conf common.IConfigInfo
+	conf config.IConfigInfo
 )
 
 func init() {
 	var err error
-	conf, err = common.ParseConfig([]byte(config_content))
+	conf, err = config.ParseConfig([]byte(configContent))
 	if err != nil {
 		panic("配置文件加载错误: " + err.Error())
 	}
-	if resource.Redis_instance == nil || resource.Mongo_pool == nil {
-		resource.Init(conf)
+	resource.Init(conf)
 
-		// InitRedis(conf)
-		dispatcher.ClearHistoryData(func() error {
-			_, err := resource.Redis_instance.RedisDo("FLUSHDB")
-			return err
-		})
-	}
+	dispatcher.ClearHistoryData(func() error {
+		_, err := resource.RedisInstance.RedisDo("FLUSHDB")
+		return err
+	})
 
-	if lua.Lua_scripts == nil {
-		lua.Lua_scripts = lua.NewLuaScriptSet()
-	}
-	lua.InitLuaScripts(lua.Lua_scripts)
+	// if lua.Lua_scripts == nil {
+	// 	lua.Lua_scripts = lua.NewLuaScriptSet()
+	// }
+	// lua.InitLuaScripts(lua.Lua_scripts)
 }

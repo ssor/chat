@@ -7,26 +7,30 @@ import (
 	"xsbPro/common"
 )
 
-type LuaScriptSet struct {
+type luaScriptSet struct {
 	Scripts map[string]*common.Script
 }
 
-func NewLuaScriptSet() *LuaScriptSet {
-	return &LuaScriptSet{
+func newLuaScriptSet() *luaScriptSet {
+	return &luaScriptSet{
 		Scripts: make(map[string]*common.Script),
 	}
 }
 
-func (lss *LuaScriptSet) Add(name string, script *common.Script) error {
+func (lss *luaScriptSet) Add(name string, keyCount int, src string) error {
+	script := common.NewScript(keyCount, src)
+	return lss.AddScript(name, script)
+}
+func (lss *luaScriptSet) AddScript(name string, script *common.Script) error {
 	if _, exists := lss.Scripts[name]; exists {
 		return errors.New("alreay exists")
-	} else {
-		lss.Scripts[name] = script
 	}
+	lss.Scripts[name] = script
+
 	return nil
 }
 
-func (lss *LuaScriptSet) Load(loader func(*common.Script) error) error {
+func (lss *luaScriptSet) Load(loader func(*common.Script) error) error {
 
 	for name, script := range lss.Scripts {
 		err := loader(script)

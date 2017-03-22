@@ -1,17 +1,17 @@
 package server
 
-const (
-	msg_state_default   = 0
-	msg_state_buffering = 1
-	msg_state_sent      = 2
-)
+// const (
+// 	msgStateDefault   = 0
+// 	msgStateBuffering = 1
+// 	msgStateSent      = 2
+// )
 
 type messageRecord struct {
 	// SendState int //发送状态: 0,初始状态;1,缓存中;2,已发送. 当连接重置时,如果消息状态为1,需要将消息的状态置为初始状态0
 	*Message
 }
 
-func NewMessageRecord(msg *Message) *messageRecord {
+func newMessageRecord(msg *Message) *messageRecord {
 	mr := &messageRecord{
 		Message: msg,
 		// Receiver: receiver,

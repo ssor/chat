@@ -9,12 +9,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"xsbPro/chatServer/resource"
+	"xsbPro/chat/node/resource"
+	"xsbPro/chat/node/server"
 	"xsbPro/log"
 
 	"xsbPro/common"
-
-	"xsbPro/chatServer/server"
 
 	"github.com/parnurzeal/gorequest"
 )

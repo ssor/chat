@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"xsbPro/chatServer/resource"
-	"xsbPro/chatServer/server"
+	"xsbPro/chat/node/resource"
+	"xsbPro/chat/node/server"
 	"xsbPro/log"
 )
 

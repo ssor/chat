@@ -9,20 +9,27 @@ import (
 )
 
 var (
-	Redis_instance *common.Redis_Instance
-	Mongo_pool     *mongo_pool.MongoSessionPool
+	//RedisInstance redis instance
+	RedisInstance *common.Redis_Instance
+	// MongoPool mongo instance
+	MongoPool *mongo_pool.MongoSessionPool
 )
 
+// Init give a tool to init db resource
 func Init(conf config.IConfigInfo) {
 	initMongo(conf)
 	initRedis(conf)
 }
 
 func initRedis(conf config.IConfigInfo) {
-	Redis_instance = common.InitRedisInstance(conf.Get("redisHost").(string))
+	if RedisInstance == nil {
+		RedisInstance = common.InitRedisInstance(conf.Get("redisHost").(string))
+	}
 }
 
 func initMongo(conf config.IConfigInfo) {
-	Mongo_pool = mongo_pool.NewMongoSessionPool(conf.Get("mongoHost").(string), 3)
-	Mongo_pool.Run()
+	if MongoPool == nil {
+		MongoPool = mongo_pool.NewMongoSessionPool(conf.Get("mongoHost").(string), 3)
+		MongoPool.Run()
+	}
 }

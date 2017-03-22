@@ -19,9 +19,9 @@ func MakeHubsStatusReport(interviewees map[string]*Hub) *SummaryReport {
 	}
 
 	f := func() {
-		all_report_recycled := false
+		allReportRecycled := false
 		for {
-			if all_report_recycled {
+			if allReportRecycled {
 				break
 			}
 
@@ -30,11 +30,11 @@ func MakeHubsStatusReport(interviewees map[string]*Hub) *SummaryReport {
 				reports = append(reports, report)
 				delete(interviewees, report.ID)
 				if len(interviewees) <= 0 {
-					all_report_recycled = true
+					allReportRecycled = true
 				}
 			case <-time.After(time.Second * 60):
 				close(recycleCh)
-				all_report_recycled = true
+				allReportRecycled = true
 			}
 		}
 	}
@@ -67,10 +67,10 @@ type InvestigationReport struct {
 	DataTraficOut   int64  `json:"dataOut"`
 }
 
-func NewInvestigationReport(id string, user_count, online int, in, out int64) *InvestigationReport {
+func NewInvestigationReport(id string, userCount, online int, in, out int64) *InvestigationReport {
 	return &InvestigationReport{
 		ID:              id,
-		UserCount:       user_count,
+		UserCount:       userCount,
 		UserOnlineCount: online,
 		DataTraficIn:    in,
 		DataTraficOut:   out,
@@ -110,9 +110,9 @@ type Questionnaire struct {
 // 	}
 
 // 	go func() {
-// 		all_report_recycled := false
+// 		allReportRecycled := false
 // 		for {
-// 			if all_report_recycled {
+// 			if allReportRecycled {
 // 				// in.lastInvestComplete = true
 // 				// in.ReportResult(reports, interviewees)
 // 				break
@@ -124,11 +124,11 @@ type Questionnaire struct {
 // 				delete(interviewees, report.ID)
 // 				// deleteInterviewee(interviewees, report.ID)
 // 				if len(interviewees) <= 0 {
-// 					all_report_recycled = true
+// 					allReportRecycled = true
 // 				}
 // 			case <-time.After(time.Second * 60):
 // 				close(recycleCh)
-// 				all_report_recycled = true
+// 				allReportRecycled = true
 // 			}
 // 		}
 // 	}()

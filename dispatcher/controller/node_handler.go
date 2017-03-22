@@ -6,17 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	dispatcher "xsbPro/chatDispatcher/dispatcher"
-	"xsbPro/chatDispatcher/lua"
+	"xsbPro/chat/dispatcher/dispatcher"
+	"xsbPro/chat/dispatcher/resource"
+	"xsbPro/chat/lua"
 	"xsbPro/log"
-
-	"xsbPro/chatDispatcher/resource"
 
 	"github.com/gin-gonic/gin"
 )
 
 func GetNodesInfo(c *gin.Context) {
-	nodes, err := dispatcher.GetNodeInfoList(nil, resource.Redis_instance.DoScript)
+	nodes, err := dispatcher.GetNodeInfoList(nil, resource.RedisInstance.DoScript)
 	if err != nil {
 		log.SysF("err: %s", err)
 		c.JSON(http.StatusInternalServerError, nil)
@@ -29,7 +28,7 @@ func GetNodesInfo(c *gin.Context) {
 func GetGroupsInfo(c *gin.Context) {
 	node := c.Query("node") // lan
 
-	groups, err := lua.GetGroupsOnNode(node, resource.Redis_instance.DoScript)
+	groups, err := lua.GetGroupsOnNode(node, resource.RedisInstance.DoScript)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, err.Error())
 		return
@@ -42,7 +41,7 @@ func GetGroupsInfo(c *gin.Context) {
 func CheckNodeRegistered(c *gin.Context) {
 	node := c.Query("node")
 
-	exists := dispatcher.NodeExists(node, resource.Redis_instance.RedisDo)
+	exists := lua.NodeExists(node, resource.RedisInstance.RedisDo)
 	if exists {
 		c.JSON(http.StatusOK, "OK")
 	} else {
@@ -76,14 +75,14 @@ func NewNodeOnLine(c *gin.Context) {
 	// 	return
 	// }
 
-	err = dispatcher.RegisterToNodeCenter(dispatcher.NewNodeInfo(ni.Lan, ni.Wan, ni.Capability), resource.Redis_instance.RedisDo)
+	err = dispatcher.RegisterToNodeCenter(dispatcher.NewNodeInfo(ni.Lan, ni.Wan, ni.Capability), resource.RedisInstance.RedisDo)
 	if err != nil {
 		log.SysF("RegisterToNodeCenter error: %s", err.Error())
 		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
 
-	err = dispatcher.UpdateNodeCapacity(ni.Lan, ni.Capability, resource.Redis_instance.DoScript)
+	err = lua.UpdateNodeCapacity(ni.Lan, ni.Capability, resource.RedisInstance.DoScript)
 	if err != nil {
 		log.SysF("NodeUpdateCapacity error: %s", err.Error())
 		c.JSON(http.StatusBadRequest, err.Error())
@@ -94,7 +93,7 @@ func NewNodeOnLine(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-// DispatchRequest 更新承载量
+// NodeUpdateCapacity 更新承载量
 func NodeUpdateCapacity(c *gin.Context) {
 	type requestInfo struct {
 		Node     string `json:"node" binding:"required"`
@@ -111,7 +110,7 @@ func NodeUpdateCapacity(c *gin.Context) {
 		return
 	}
 
-	err = dispatcher.UpdateNodeCapacity(ni.Node, ni.Capacity, resource.Redis_instance.DoScript)
+	err = lua.UpdateNodeCapacity(ni.Node, ni.Capacity, resource.RedisInstance.DoScript)
 	if err != nil {
 		log.SysF("NodeUpdateCapacity error: %s", err.Error())
 		c.JSON(http.StatusBadRequest, err.Error())
@@ -134,10 +133,10 @@ func LoginInfoRequest(c *gin.Context) {
 		return
 	}
 
-	wan, err := dispatcher.GetNodeByGroup(groupID, resource.Redis_instance.DoScript)
+	wan, err := lua.GetNodeByGroup(groupID, resource.RedisInstance.DoScript)
 	if err != nil {
 		log.SysF("LoginInfoRequest error: %s", err)
-		c.JSON(http.StatusOK, NewResponse(1, "system error", nil))
+		c.JSON(http.StatusOK, newResponse(1, "system error", nil))
 		return
 	}
 	//已分配到指定节点
@@ -145,10 +144,10 @@ func LoginInfoRequest(c *gin.Context) {
 		url := fmt.Sprintf("/ws?group=%s&id=%s", groupID, userID)
 		hosts := []string{"ws://" + wan}
 		// c.JSON(http.StatusOK, NewResponse(0, "", NewLoginInfo(url, hosts)))
-		bs, err := JSONMarshal(NewResponse(0, "", NewLoginInfo(url, hosts)), true)
+		bs, err := jsonMarshal(newResponse(0, "", NewLoginInfo(url, hosts)), true)
 		if err != nil {
 			log.SysF("LoginInfoRequest error: %s", err)
-			c.JSON(http.StatusOK, NewResponse(404, "", NewLoginInfo("", []string{})))
+			c.JSON(http.StatusOK, newResponse(404, "", NewLoginInfo("", []string{})))
 			return
 		}
 		c.Data(http.StatusOK, "application/json; charset=utf-8", bs)
@@ -156,11 +155,11 @@ func LoginInfoRequest(c *gin.Context) {
 	}
 	//尚未找到分配节点
 	log.TraceF("no node for group %s yet", groupID)
-	c.JSON(http.StatusOK, NewResponse(404, "", NewLoginInfo("", []string{})))
+	c.JSON(http.StatusOK, newResponse(404, "", NewLoginInfo("", []string{})))
 	return
 }
 
-func JSONMarshal(v interface{}, safeEncoding bool) ([]byte, error) {
+func jsonMarshal(v interface{}, safeEncoding bool) ([]byte, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, err

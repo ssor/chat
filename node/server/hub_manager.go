@@ -3,7 +3,7 @@ package server
 import (
 	"runtime"
 	"time"
-	"xsbPro/chatDispatcher/lua"
+	"xsbPro/chat/lua"
 	"xsbPro/log"
 )
 
@@ -44,7 +44,7 @@ func (hm *HubManager) refreshGroupsFromRedis(node string, scriptExecutor lua.Scr
 	log.InfoF("%d groups on node %s", len(groups), node)
 	//将不应存在的 hub 移除
 	//更新现存的 hub 中的用户数据
-	func_exists_in_groups := func(group_id string) bool {
+	funcExistsInGroups := func(group_id string) bool {
 		for _, group := range groups {
 			if group.ID == group_id {
 				return true
@@ -52,9 +52,9 @@ func (hm *HubManager) refreshGroupsFromRedis(node string, scriptExecutor lua.Scr
 		}
 		return false
 	}
-	hubs_current := hm.GetHubs()
-	for id := range hubs_current {
-		if func_exists_in_groups(id) == false {
+	hubsCurrent := hm.GetHubs()
+	for id := range hubsCurrent {
+		if funcExistsInGroups(id) == false {
 			err = hm.RemoveHub(id)
 			if err != nil {
 				return err
@@ -75,12 +75,12 @@ func (hm *HubManager) refreshGroupsFromRedis(node string, scriptExecutor lua.Scr
 func (hm *HubManager) loadGroupFromRedis(group, node string, scriptExecutor lua.ScriptExecutor) (*Hub, error) {
 	users := NewSafeUserList()
 
-	users_array, err := lua.GetGroupUsersOnNode(group, node, scriptExecutor)
+	usersArray, err := lua.GetGroupUsersOnNode(group, node, scriptExecutor)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, user := range users_array {
+	for _, user := range usersArray {
 		users.Set(user.ID, NewUser(NewRealUserInfo(user), nil))
 	}
 	nh := NewHub(group, users)

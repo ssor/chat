@@ -1,20 +1,17 @@
 package dispatcher
 
 import (
-	"errors"
 	"strings"
-	"xsbPro/chatDispatcher/lua"
+	"xsbPro/chat/lua"
 	"xsbPro/log"
-
-	"fmt"
 
 	"github.com/parnurzeal/gorequest"
 	"github.com/ssor/redigo/redis"
 )
 
 const (
-	node_state_alive = "alive"
-	node_state_dead  = "dead"
+	nodeStateAlive = "alive"
+	nodeStateDead  = "dead"
 )
 
 //
@@ -24,23 +21,23 @@ const (
 type RedisDo func(cmd string, args ...interface{}) (interface{}, error)
 
 var (
-	err_no_node                   = errors.New("no node to dispatch")
-	err_all_node_full_load        = errors.New("all node full load")
-	err_record_did_too_many_times = errors.New("too many times did on this record")
+// errNoNode                     = errors.New("no node to dispatch")
+// errAllNodeFullLoad            = errors.New("all node full load")
+// err_record_did_too_many_times = errors.New("too many times did on this record")
 )
 
-func NodeExists(lan string, redisDo func(cmd string, args ...interface{}) (interface{}, error)) bool {
+// func NodeExists(lan string, redisDo func(cmd string, args ...interface{}) (interface{}, error)) bool {
 
-	res, err := redisDo("EXISTS", redis.Args{}.Add(lua.Format_nodeinfo_key(lan))...)
-	if err != nil {
-		log.SysF("NodeExists error: %s", err)
-		return false
-	}
-	if res.(int64) == 1 {
-		return true
-	}
-	return false
-}
+// 	res, err := redisDo("EXISTS", redis.Args{}.Add(lua.Format_nodeinfo_key(lan))...)
+// 	if err != nil {
+// 		log.SysF("NodeExists error: %s", err)
+// 		return false
+// 	}
+// 	if res.(int64) == 1 {
+// 		return true
+// 	}
+// 	return false
+// }
 
 //向 node 管理中心注册,如果注册失败则退出
 func RegisterToNodeCenter(node_info *NodeInfo, redisDo func(cmd string, args ...interface{}) (interface{}, error)) error {
@@ -52,48 +49,47 @@ func RegisterToNodeCenter(node_info *NodeInfo, redisDo func(cmd string, args ...
 	return nil
 }
 
-func RemoveNode(lan string, scriptExecutor ScriptExecutor) error {
-	node_key := lua.Format_nodeinfo_key(lan)
-	args := redis.Args{}.Add(node_key)
-	res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_remove_node], args...)
-	if err != nil {
-		log.SysF("RemoveNode error: %s", err)
-		return err
-	}
-	if string(res.([]uint8)) != "OK" {
-		return fmt.Errorf("RemoveNode failed")
-	}
-	return nil
-}
+// func RemoveNode(lan string, scriptExecutor ScriptExecutor) error {
+// 	node_key := lua.Format_nodeinfo_key(lan)
+// 	args := redis.Args{}.Add(node_key)
+// 	res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_remove_node], args...)
+// 	if err != nil {
+// 		log.SysF("RemoveNode error: %s", err)
+// 		return err
+// 	}
+// 	if string(res.([]uint8)) != "OK" {
+// 		return fmt.Errorf("RemoveNode failed")
+// 	}
+// 	return nil
+// }
 
-// func (nm *NodeManager) updateNodeCapacity(ip string, cap int) {
-func UpdateNodeCapacity(ip string, cap int, scriptExecutor ScriptExecutor) error {
-	if len(ip) > 0 {
+// func UpdateNodeCapacity(ip string, cap int, scriptExecutor ScriptExecutor) error {
+// 	if len(ip) > 0 {
 
-		node_key := lua.Format_nodeinfo_key(ip)
-		args := redis.Args{}.Add(node_key).AddFlat(cap)
-		res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_update_node_capability], args...)
-		if err != nil {
-			log.SysF("updateNodeCapacity error: %s", err)
-			return err
-		}
-		if string(res.([]uint8)) != "OK" {
-			return fmt.Errorf("update cap failed")
-		}
-		log.InfoF("node %s capacity updated to %d", ip, cap)
-	}
-	return nil
-}
+// 		node_key := lua.Format_nodeinfo_key(ip)
+// 		args := redis.Args{}.Add(node_key).AddFlat(cap)
+// 		res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_update_node_capability], args...)
+// 		if err != nil {
+// 			log.SysF("updateNodeCapacity error: %s", err)
+// 			return err
+// 		}
+// 		if string(res.([]uint8)) != "OK" {
+// 			return fmt.Errorf("update cap failed")
+// 		}
+// 		log.InfoF("node %s capacity updated to %d", ip, cap)
+// 	}
+// 	return nil
+// }
 
-func GetUnloadGroupCount(scriptExecutor ScriptExecutor) (int, error) {
-	res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_get_unload_group_count], redis.Args{})
-	if err != nil {
-		log.SysF("GetUnloadGroupCount error: %s", err)
-		return 0, err
-	}
+// func GetUnloadGroupCount(scriptExecutor ScriptExecutor) (int, error) {
+// 	res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_get_unload_group_count], redis.Args{})
+// 	if err != nil {
+// 		log.SysF("GetUnloadGroupCount error: %s", err)
+// 		return 0, err
+// 	}
 
-	return int(res.(int64)), nil
-}
+// 	return int(res.(int64)), nil
+// }
 
 // //如果指定节点,则分配到该节点
 // func (nm *NodeManager) newGroupRequest(group, lan string) {
@@ -104,23 +100,23 @@ func GetUnloadGroupCount(scriptExecutor ScriptExecutor) (int, error) {
 // 	}
 // }
 
-//if node registered is not alive any more, clear it
+//CheckNodeState if node registered is not alive any more, clear it
 func CheckNodeState(redisDo RedisDo, next func(string, string) error) {
 	log.Info("CheckNodeState --->>>")
-	node_keys, err := getAllNodeKeys(redisDo)
+	nodeKeys, err := lua.GetAllNodeKeys(lua.RedisDo(redisDo))
 	if err != nil {
 		log.InfoF("CheckNodeState error: %s", err)
 		return
 	}
-	log.InfoF("get %d nodes now", len(node_keys))
-	for _, key := range node_keys {
-		split_result := strings.Split(key, "->")
-		if len(split_result) < 2 {
+	log.InfoF("get %d nodes now", len(nodeKeys))
+	for _, key := range nodeKeys {
+		splitResult := strings.Split(key, "->")
+		if len(splitResult) < 2 {
 			log.SysF("sys error: node format error")
 			return
 		}
-		lan := split_result[1]
-		state := checkNodeState(lan)
+		lan := splitResult[1]
+		state := echoNodeState(lan)
 		log.InfoF("state of node %s now is %s", lan, state)
 		if next != nil {
 			err := next(state, lan)
@@ -128,26 +124,26 @@ func CheckNodeState(redisDo RedisDo, next func(string, string) error) {
 				log.SysF("sys error: %s", err.Error())
 			}
 		}
-		// if state == node_state_dead {
+		// if state == nodeStateDead {
 		// 	err := next(lan)
 		// 	log.SysF("sys error: %s", err)
 		// }
 	}
 }
 
-func checkNodeState(ip string) string {
-	res, _, errs := gorequest.New().Get(getEchoUrl(ip)).End()
+func echoNodeState(ip string) string {
+	res, _, errs := gorequest.New().Get(formatEchoURL(ip)).End()
 	if errs != nil && len(errs) > 0 {
 		log.InfoF("checkNodeState error:%s", errs[0])
-		return node_state_dead
+		return nodeStateDead
 	}
 	if res.StatusCode != 200 {
 		log.InfoF("node %s die", ip)
-		return node_state_dead
+		return nodeStateDead
 	}
 	// log.TraceF("node %s running well", ip)
 
-	return node_state_alive
+	return nodeStateAlive
 }
 
 // func (nm *NodeManager) run() {
