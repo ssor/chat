@@ -4,27 +4,27 @@ import (
 	"sync"
 )
 
-type SafeHubList struct {
+type safeHubList struct {
 	lock *sync.RWMutex
 	bm   map[string]*Hub
 }
 
-// NewBeeMap return new safemap
-func NewSafeHubList() *SafeHubList {
-	return &SafeHubList{
+// newSafeHubList return new
+func newSafeHubList() *safeHubList {
+	return &safeHubList{
 		lock: new(sync.RWMutex),
 		bm:   make(map[string]*Hub),
 	}
 }
 
-func (m *SafeHubList) Length() int {
+func (m *safeHubList) Length() int {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	return len(m.bm)
 }
 
 // Get from maps return the k's value
-func (m *SafeHubList) Get(k string) *Hub {
+func (m *safeHubList) Get(k string) *Hub {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	if val, ok := m.bm[k]; ok {
@@ -33,9 +33,9 @@ func (m *SafeHubList) Get(k string) *Hub {
 	return nil
 }
 
-// Maps the given key and value. Returns false
+// Set Maps the given key and value. Returns false
 // if the key is already in the map and changes nothing.
-func (m *SafeHubList) Set(k string, v *Hub) bool {
+func (m *safeHubList) Set(k string, v *Hub) bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	if val, ok := m.bm[k]; !ok {
@@ -48,8 +48,8 @@ func (m *SafeHubList) Set(k string, v *Hub) bool {
 	return true
 }
 
-// Returns true if k is exist in the map.
-func (m *SafeHubList) Check(k string) bool {
+//Check Returns true if k is exist in the map.
+func (m *safeHubList) Check(k string) bool {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	if _, ok := m.bm[k]; !ok {
@@ -59,14 +59,14 @@ func (m *SafeHubList) Check(k string) bool {
 }
 
 // Delete the given key and value.
-func (m *SafeHubList) Delete(k string) {
+func (m *safeHubList) Delete(k string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	delete(m.bm, k)
 }
 
 // Items returns all items in safemap.
-func (m *SafeHubList) Items() map[string]*Hub {
+func (m *safeHubList) Items() map[string]*Hub {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	r := make(map[string]*Hub)

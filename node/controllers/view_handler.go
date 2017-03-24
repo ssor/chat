@@ -14,7 +14,7 @@ func HomeDirect(c *gin.Context) {
 func HomeIndirect(c *gin.Context) {
 	userID := c.Query("user")
 	groupID := c.Query("group")
-	c.HTML(http.StatusOK, "indirect.tpl", gin.H{"HOST": conf.GetNodeWanHost(), "USER": userID, "GROUP": groupID})
+	c.HTML(http.StatusOK, "indirect.tpl", gin.H{"HOST": conf.Get("nodeWanHost").(string), "USER": userID, "GROUP": groupID})
 	// c.HTML(http.StatusOK, "indirect.tpl", gin.H{"HOST": conf.GetRegisterCenterHost(), "USER": userID, "GROUP": groupID})
 }
 

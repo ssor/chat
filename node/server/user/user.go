@@ -1,4 +1,4 @@
-package server
+package user
 
 import (
 	"encoding/json"
@@ -7,26 +7,6 @@ import (
 	"xsbPro/log"
 	modeldb "xsbPro/xsbdb"
 )
-
-type FakeUserInfo struct {
-	id string
-}
-
-func NewFakeUserInfo(id string) *FakeUserInfo {
-	return &FakeUserInfo{id: id}
-}
-
-func (fui *FakeUserInfo) GetUserID() string {
-	return fui.id
-}
-
-func (fui *FakeUserInfo) GetUserName() string {
-	return "FakeUser"
-}
-
-func (rui *FakeUserInfo) IsFake() bool {
-	return true
-}
 
 type RealUserInfo struct {
 	*modeldb.User
@@ -48,26 +28,14 @@ func (rui *RealUserInfo) IsFake() bool {
 	return false
 }
 
-type UserInfo interface {
-	GetUserID() string
-	GetUserName() string
-	IsFake() bool
-}
-
 func NewUser(user UserInfo, hub *Hub) *User {
 	return &User{
 		User:           user,
 		hub:            hub,
-		MessageRecords: MessageRecordArray{},
+		MessageRecords: messageRecordArray{},
 		lastActiveTime: time.Now(),
 		mutex:          &sync.Mutex{},
 	}
-}
-
-type IConnection interface {
-	Close(string, time.Duration)
-	Send(*messageRecord) error
-	GetID() string
 }
 
 //User in chat
@@ -76,7 +44,7 @@ type User struct {
 	User           UserInfo
 	hub            *Hub
 	conn           IConnection
-	MessageRecords MessageRecordArray
+	MessageRecords messageRecordArray
 	lastActiveTime time.Time
 	mutex          *sync.Mutex
 }
@@ -98,15 +66,10 @@ func (u *User) broadcastMessage() {
 	u.clearMessageRecords()
 
 	for _, mr := range u.MessageRecords {
-		// if mr.SendState == msg_state_default {
 		err := conn.Send(mr)
 		if err != nil {
-			// log.InfoF("broadcastMessage error: %s", err)
-			// send data next time, records after this will not use this connection
-			// return
 			break
 		}
-		// }
 	}
 }
 
@@ -117,7 +80,7 @@ func (u *User) clearMessageRecords() {
 	//如果第一条消息是回执消息,说明排名第二的消息已经被收到,应该清除前两条消息
 	if u.MessageRecords[0].Protocal == protoReply {
 		if len(u.MessageRecords) < 2 { //有回执,但没消息说明有错误发生
-			u.MessageRecords = MessageRecordArray{}
+			u.MessageRecords = messageRecordArray{}
 			return
 		}
 
@@ -127,16 +90,12 @@ func (u *User) clearMessageRecords() {
 	// nowSeconds := time.Now().Unix()
 	secondsOf3DaysAgo := time.Now().AddDate(0, 0, -3).UnixNano()
 
-	list := MessageRecordArray{}
+	list := messageRecordArray{}
 	for _, r := range u.MessageRecords {
 		// if r.Timestamp > secondsOf3DaysAgo && r.SendState != msg_state_sent {
 		if r.Timestamp > secondsOf3DaysAgo {
 			list = append(list, r)
 		}
-
-		// if len(r.Receivers) > 0 {
-		// 	list = append(list, r)
-		// }
 	}
 	if len(list) != len(u.MessageRecords) {
 		log.TraceF("user %s  %d records to send", u.User.GetUserName(), len(list))
@@ -189,18 +148,7 @@ func (u *User) ConnError(uid string) {
 		u.MessageRecords = u.MessageRecords[0:0]
 	}
 
-	// u.setBufferedMsgToDefault()
-	// m, _ := newLogoutMessage(u.User)
-	// u.hub.newMessage(m, nil)
 }
-
-// func (u *User) setBufferedMsgToDefault() {
-// 	for _, r := range u.MessageRecords {
-// 		if r.SendState == msg_state_buffering {
-// 			r.SendState = msg_state_default
-// 		}
-// 	}
-// }
 
 // NewMessage new data upload from user's conn
 func (u *User) NewMessage(data []byte) {
@@ -226,8 +174,6 @@ func (u *User) NewMessage(data []byte) {
 			}
 		default:
 		}
-		// (mIn.Protocal == protoShare || mIn.Protocal == protoText)
-		// m, err := newMessage(mIn.Protocal, u.ID, u.Name, mIn.Content)
 	} else {
 		log.SysF("NewMessage error: %s %s", err.Error(), string(data))
 	}
@@ -241,10 +187,8 @@ func (u *User) AddRecord(m *Message) {
 
 	r := newMessageRecord(m)
 	switch m.Protocal {
-	// case protoLogout: //, protoLogin
-	// u.MessageRecords = append(MessageRecordArray{r}, u.MessageRecords...)
 	case protoReply:
-		u.MessageRecords = append(MessageRecordArray{r}, u.MessageRecords...)
+		u.MessageRecords = append(messageRecordArray{r}, u.MessageRecords...)
 	default:
 		u.MessageRecords = append(u.MessageRecords, r)
 	}

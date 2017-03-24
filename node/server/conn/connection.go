@@ -1,14 +1,14 @@
-package server
+package conn
 
 import (
 	"errors"
 	"strconv"
 	"sync"
+	"time"
+
+	"xsbPro/log"
 
 	"github.com/gorilla/websocket"
-	// "net/http"
-	"time"
-	"xsbPro/log"
 )
 
 //
@@ -25,13 +25,6 @@ var (
 type ReportObject interface {
 	NewMessage([]byte)
 	ConnError(string)
-}
-
-type Socket interface {
-	ReadMessage() (messageType int, p []byte, err error)
-	WriteMessage(messageType int, data []byte) error
-	SetWriteDeadline(t time.Time) error
-	Close() error
 }
 
 // Connection is an middleman between the websocket connection and the hub.
@@ -82,12 +75,6 @@ func (c *Connection) ReadPump() {
 			c.reportObj.ConnError(c.uid)
 		}
 	}()
-	// c.ws.SetReadLimit(maxMessageSize)
-	// c.ws.SetReadDeadline(time.Now().Add(pongWait))
-	// c.ws.SetPongHandler(func(string) error {
-	// 	c.ws.SetReadDeadline(time.Now().Add(pongWait))
-	// 	return nil
-	// })
 
 	for {
 		log.InfoF("start read message ...")

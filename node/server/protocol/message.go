@@ -1,4 +1,4 @@
-package server
+package protocol
 
 import (
 	"encoding/json"
@@ -10,16 +10,26 @@ var (
 	// protoUnknown = -1
 	// protoLogin  = 0
 	// protoLogout = 1
-	protoText  = 2
-	protoImage = 3
-	protoAudio = 4
-	protoShare = 5
-	protoReply = 6
-	protoBot   = 888
 
-	protoCloseLoginOnOtherDevice = "loginOnOtherDevice" //server close conn and do not want client to reconnect in short time
+	// ProtoText text
+	ProtoText = 2
+	// ProtoImage image upload
+	ProtoImage = 3
+	// ProtoAudio audio upload
+	ProtoAudio = 4
+	// ProtoShare share some thing
+	ProtoShare = 5
+	// ProtoReply reply from client
+	ProtoReply = 6
+	// ProtoBot bot chat
+	ProtoBot = 888
+	// ProtoCloseLoginOnOtherDevice server close conn and do not want client to reconnect in short time
+	ProtoCloseLoginOnOtherDevice = "loginOnOtherDevice"
 )
 
+// type messageList []*Message
+
+// Message format for communication with client
 type Message struct {
 	Protocal     int    `json:"protocol"`
 	ID           string `json:"uid"`
@@ -43,6 +53,7 @@ func (message *Message) fill(id, name string) error {
 	return nil
 }
 
+// NewMessage init a message
 func NewMessage(proto int, id, name, content string) (*Message, error) {
 	ns := time.Now().UnixNano()
 	m := &Message{
@@ -51,6 +62,7 @@ func NewMessage(proto int, id, name, content string) (*Message, error) {
 		Name:      name,
 		Content:   content,
 		Timestamp: ns,
+		MessageID: fmt.Sprintf("%d%s%d", proto, id, ns),
 	}
 	bs, err := json.Marshal(m)
 	if err != nil {
@@ -58,6 +70,16 @@ func NewMessage(proto int, id, name, content string) (*Message, error) {
 	}
 	m.MessageBytes = bs
 	return m, nil
+}
+
+// GetID returns message's unique ID
+func (message *Message) GetID() string {
+	return message.MessageID
+}
+
+// GetContent returns data for binary
+func (message *Message) GetContent() []byte {
+	return message.MessageBytes
 }
 
 //String use
@@ -77,15 +99,16 @@ func (message *Message) String() string {
 // 	return newMessage(protoText, u.ID, u.Name, content)
 // }
 //
-func NewImageMessage(u UserInfo, name string) (*Message, error) {
-	// return newMessage(protoImage, u.ID, u.Name, ResourceDirMapList[imageDir].FullURL()+name)
-	return NewMessage(protoImage, u.GetUserID(), u.GetUserName(), name)
-}
 
-func NewAudioMessage(u UserInfo, name string) (*Message, error) {
-	// return newMessage(protoAudio, u.ID, u.Name, ResourceDirMapList[audioDir].FullURL()+name)
-	return NewMessage(protoAudio, u.GetUserID(), u.GetUserName(), name)
-}
+// func NewImageMessage(userID, userName, name string) (*Message, error) {
+// 	// return newMessage(protoImage, u.ID, u.Name, ResourceDirMapList[imageDir].FullURL()+name)
+// 	return NewMessage(ProtoImage, userID, userName, name)
+// }
+
+// func NewAudioMessage(userID, userName, name string) (*Message, error) {
+// 	// return newMessage(protoAudio, u.ID, u.Name, ResourceDirMapList[audioDir].FullURL()+name)
+// 	return NewMessage(ProtoAudio, userID, userName, name)
+// }
 
 // func newCloseNotifyMessage() (*message, error) {
 // 	return newMessage(protoClose, "", "", "")

@@ -41,6 +41,101 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+//将 redis 中的数据和本地数据进行同步
+func (hm *HubManager) refreshGroupsFromRedis(node string, scriptExecutor lua.ScriptExecutor) error {
+	groups, err := lua.GetGroupsOnNode(node, scriptExecutor)
+	if err != nil {
+		return err
+	}
+	log.InfoF("%d groups on node %s", len(groups), node)
+	//将不应存在的 hub 移除
+	//更新现存的 hub 中的用户数据
+	funcExistsInGroups := func(group_id string) bool {
+		for _, group := range groups {
+			if group.ID == group_id {
+				return true
+			}
+		}
+		return false
+	}
+	hubsCurrent := hm.GetHubs()
+	for id := range hubsCurrent {
+		if funcExistsInGroups(id) == false {
+			err = hm.RemoveHub(id)
+			if err != nil {
+				return err
+			}
+			log.InfoF("group %s has been removed from db")
+		} else {
+			err = hm.RefreshUsers(id, scriptExecutor)
+			if err != nil {
+				return err
+			}
+			log.InfoF("users of group %s has been updated")
+		}
+	}
+
+	return nil
+}
+
+func (hm *HubManager) loadGroupFromRedis(group, node string, scriptExecutor lua.ScriptExecutor) (*Hub, error) {
+	users := NewSafeUserList()
+
+	usersArray, err := lua.GetGroupUsersOnNode(group, node, scriptExecutor)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, user := range usersArray {
+		users.Set(user.ID, NewUser(NewRealUserInfo(user), nil))
+	}
+	nh := NewHub(group, users)
+	hm.Add(nh)
+	return nh, nil
+}
+func (hm *HubManager) RefreshUsers(id string, scriptExecutor lua.ScriptExecutor) error {
+	hub := hm.Hubs.Get(id)
+	if hub == nil {
+		return nil
+	}
+	return hub.RefreshUsers(scriptExecutor)
+}
+
+// func (h *Hub) RefreshUsers(scriptExecutor lua.ScriptExecutor) error {
+// 	users, err := lua.GetGroupUsers(h.group, scriptExecutor)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	//new user added to this group
+// 	for _, dbUser := range users {
+// 		if h.FindUser(dbUser.ID) == nil {
+// 			nu := NewUser(NewRealUserInfo(dbUser), h)
+// 			h.GroupUsers.Set(dbUser.ID, nu)
+// 		}
+// 	}
+// 	//some user removed from this group
+// 	findUser := func(users db.UserArray, id string) *db.User {
+// 		for _, user := range users {
+// 			if user.ID == id {
+// 				return user
+// 			}
+// 		}
+// 		return nil
+// 	}
+// 	for _, user := range h.GroupUsers.Items() {
+// 		if findUser(users, user.User.GetUserID()) == nil {
+// 			user.conn.Close("REMOVED_FROM_GROUP", 3*time.Second)
+// 			h.GroupUsers.Delete(user.User.GetUserID())
+// 		}
+// 	}
+
+// 	return nil
+// }
+
+func (h *Hub) acceptInterview(questionnaire *Questionnaire) {
+	h.investigate <- questionnaire
+}
 func RefreshAll(scriptExecutor lua.ScriptExecutor) error {
 	err := hubManager.refreshGroupsFromRedis(nodeID, scriptExecutor)
 	if err != nil {
@@ -87,7 +182,7 @@ func NewUserRequest(groupID, userID string, c *gin.Context, scriptExecutor lua.S
 	if ui == nil {
 		var userInfo UserInfo
 		if strings.HasPrefix(userID, "iamafakeuser") { //以虚假用户身份登录
-			userInfo = NewFakeUserInfo(userID)
+			userInfo = newFakeUserInfo(userID)
 		}
 
 		if userInfo != nil {
