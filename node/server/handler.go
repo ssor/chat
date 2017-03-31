@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,9 +9,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 	"xsbPro/chat/lua"
+	"xsbPro/chat/node/server/communication"
 	"xsbPro/log"
 	"xsbPro/xsbAdmin/libs/tools"
 
@@ -41,133 +42,26 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-//将 redis 中的数据和本地数据进行同步
-func (hm *HubManager) refreshGroupsFromRedis(node string, scriptExecutor lua.ScriptExecutor) error {
-	groups, err := lua.GetGroupsOnNode(node, scriptExecutor)
-	if err != nil {
-		return err
-	}
-	log.InfoF("%d groups on node %s", len(groups), node)
-	//将不应存在的 hub 移除
-	//更新现存的 hub 中的用户数据
-	funcExistsInGroups := func(group_id string) bool {
-		for _, group := range groups {
-			if group.ID == group_id {
-				return true
-			}
-		}
-		return false
-	}
-	hubsCurrent := hm.GetHubs()
-	for id := range hubsCurrent {
-		if funcExistsInGroups(id) == false {
-			err = hm.RemoveHub(id)
-			if err != nil {
-				return err
-			}
-			log.InfoF("group %s has been removed from db")
-		} else {
-			err = hm.RefreshUsers(id, scriptExecutor)
-			if err != nil {
-				return err
-			}
-			log.InfoF("users of group %s has been updated")
-		}
-	}
-
-	return nil
-}
-
-func (hm *HubManager) loadGroupFromRedis(group, node string, scriptExecutor lua.ScriptExecutor) (*Hub, error) {
-	users := NewSafeUserList()
-
-	usersArray, err := lua.GetGroupUsersOnNode(group, node, scriptExecutor)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, user := range usersArray {
-		users.Set(user.ID, NewUser(NewRealUserInfo(user), nil))
-	}
-	nh := NewHub(group, users)
-	hm.Add(nh)
-	return nh, nil
-}
-func (hm *HubManager) RefreshUsers(id string, scriptExecutor lua.ScriptExecutor) error {
-	hub := hm.Hubs.Get(id)
-	if hub == nil {
-		return nil
-	}
-	return hub.RefreshUsers(scriptExecutor)
-}
-
-// func (h *Hub) RefreshUsers(scriptExecutor lua.ScriptExecutor) error {
-// 	users, err := lua.GetGroupUsers(h.group, scriptExecutor)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	//new user added to this group
-// 	for _, dbUser := range users {
-// 		if h.FindUser(dbUser.ID) == nil {
-// 			nu := NewUser(NewRealUserInfo(dbUser), h)
-// 			h.GroupUsers.Set(dbUser.ID, nu)
-// 		}
-// 	}
-// 	//some user removed from this group
-// 	findUser := func(users db.UserArray, id string) *db.User {
-// 		for _, user := range users {
-// 			if user.ID == id {
-// 				return user
-// 			}
-// 		}
-// 		return nil
-// 	}
-// 	for _, user := range h.GroupUsers.Items() {
-// 		if findUser(users, user.User.GetUserID()) == nil {
-// 			user.conn.Close("REMOVED_FROM_GROUP", 3*time.Second)
-// 			h.GroupUsers.Delete(user.User.GetUserID())
-// 		}
-// 	}
-
-// 	return nil
-// }
-
-func (h *Hub) acceptInterview(questionnaire *Questionnaire) {
-	h.investigate <- questionnaire
-}
-func RefreshAll(scriptExecutor lua.ScriptExecutor) error {
-	err := hubManager.refreshGroupsFromRedis(nodeID, scriptExecutor)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func RemoveGroup(group string) error {
-	return hubManager.RemoveHub(group)
-}
-
-// RefreshGroupUsers 更新 group 本身的删除 以及 group 内成员的变化
-func RefreshGroupUsers(group string, scriptExecutor lua.ScriptExecutor) error {
-	return hubManager.RefreshUsers(group, scriptExecutor)
-}
-
+// NodeStatusReport returns a node status report
 func NodeStatusReport() *SummaryReport {
-	sr := MakeHubsStatusReport(hubManager.GetHubs())
-	return sr
+	// sr := MakeHubsStatusReport(hubManager.GetHubs())
+	// return sr
+	return nil
 }
 
 // // checkSameOrigin returns true if the origin is not set or is equal to the request host.
 // func checkOriginAllowed(r *http.Request) bool {
 // 	return true
 // }
+
+// NewUserRequest handles new connect request
+// groupID is hub id
 func NewUserRequest(groupID, userID string, c *gin.Context, scriptExecutor lua.ScriptExecutor) error {
 	var err error
-	hm := hubManager
-	hub := hm.Hubs.Get(groupID)
+	// hm := hubManager
+	hub := serverInstance.findHub(groupID)
 	if hub == nil {
-		hub, err = hm.loadGroupFromRedis(groupID, nodeID, scriptExecutor)
+		hub, err = loadGroupFromRedis(groupID, nodeID, scriptExecutor)
 		if err != nil {
 			return err
 		}
@@ -178,26 +72,26 @@ func NewUserRequest(groupID, userID string, c *gin.Context, scriptExecutor lua.S
 		return fmt.Errorf("noServiceForThisGroup")
 	}
 
-	ui := hub.FindUser(userID)
-	if ui == nil {
-		var userInfo UserInfo
-		if strings.HasPrefix(userID, "iamafakeuser") { //以虚假用户身份登录
-			userInfo = newFakeUserInfo(userID)
-		}
+	user := hub.FindUser(userID)
+	// if user == nil {
+	// 	var userInfo UserInfo
+	// 	if strings.HasPrefix(userID, "iamafakeuser") { //以虚假用户身份登录
+	// 		userInfo = user.NewFakeUserInfo(userID)
+	// 	}
 
-		if userInfo != nil {
-			ui = NewUser(userInfo, hub)
-			hub.GroupUsers.Set(ui.User.GetUserID(), ui)
-		}
-	}
+	// 	if userInfo != nil {
+	// 		user = NewUser(userInfo, hub)
+	// 		hub.GroupUsers.Set(user.User.GetUserID(), user)
+	// 	}
+	// }
 
-	if ui == nil {
+	if user == nil {
 		log.InfoF("no user %s in group %s", userID, groupID)
 		c.AbortWithError(http.StatusOK, errors.New("noService"))
 		return fmt.Errorf("noServiceForThisGroup")
 	}
 
-	log.TraceF("user (%s %s) in group (%s) comes in", ui.User.GetUserID(), ui.User.GetUserName(), groupID)
+	log.TraceF("user (%s %s) in group (%s) comes in", user.GetID(), user.GetName(), groupID)
 
 	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -211,29 +105,20 @@ func NewUserRequest(groupID, userID string, c *gin.Context, scriptExecutor lua.S
 		ws.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
-	conn := NewConnection(ws, ui, ui.User.GetUserID())
+	// conn := NewConnection(ws, user, user.User.GetUserID())
+	ctx, cancel := context.WithCancel(context.Background())
+	user.SetConn(ws, cancel)
 
-	ui.SetConn(conn)
-	// err = hub.registerConn(conn)
-	// if err != nil {
-	// 	conn.ws.WriteMessage(websocket.CloseMessage, []byte{})
-	// 	c.AbortWithError(http.StatusOK, err)
-	// 	return
-	// }
-	go conn.WritePump(pingPeriod, writeWait)
-	conn.ReadPump()
+	// go conn.WritePump(pingPeriod, writeWait)
+	// conn.ReadPump()
+	<-ctx.Done()
 	return nil
 }
 
+// ImageUpload handlers image message
 func ImageUpload(groupID, userID, para string, c *gin.Context) {
 
-	hm := hubManager
-	if hm == nil {
-		log.InfoF("no user ID: [%s] group ID: [%s]", userID, groupID)
-		c.AbortWithError(http.StatusOK, errors.New("no user ID or group ID"))
-		return
-	}
-	hub := hm.Hubs.Get(groupID)
+	hub := serverInstance.findHub(groupID)
 	if hub == nil {
 		log.SysF("group %s does NOT exists", groupID)
 		c.AbortWithError(http.StatusOK, errors.New("no group ID"))
@@ -247,7 +132,7 @@ func ImageUpload(groupID, userID, para string, c *gin.Context) {
 		return
 	}
 
-	log.TraceF("UploadImage -> uid: %s %s", userID, ui.User.GetUserName())
+	log.TraceF("UploadImage -> uid: %s %s", userID, ui.GetName())
 
 	// para := c.Query("para")
 
@@ -289,15 +174,15 @@ func ImageUpload(groupID, userID, para string, c *gin.Context) {
 		return
 	}
 
-	message, err := NewImageMessage(ui.User, r.URL)
-	// message, err := newImageMessage(ui, fileName)
+	message, err := communication.NewImageMessage(ui.GetID(), ui.GetName(), r.URL)
 	if err != nil {
 		log.SysF("user %s add Image message error: %s", userID, err)
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	err = hub.NewMessage(message, nil)
+	err = ui.NewMessage(message)
+	// err = hub.NewMessage(message, nil)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
@@ -308,15 +193,10 @@ func ImageUpload(groupID, userID, para string, c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
+// AudioUpload handles audio msg
 func AudioUpload(groupID, userID, para string, c *gin.Context) {
 
-	hm := hubManager
-	if hm == nil {
-		log.InfoF("no user ID: [%s] group ID: [%s]", userID, groupID)
-		c.AbortWithError(http.StatusOK, errors.New("no user ID or group ID"))
-		return
-	}
-	hub := hm.Hubs.Get(groupID)
+	hub := serverInstance.findHub(groupID)
 	if hub == nil {
 		log.SysF("group %s does NOT exists", groupID)
 		c.AbortWithError(http.StatusOK, errors.New("no group ID"))
@@ -385,14 +265,14 @@ func AudioUpload(groupID, userID, para string, c *gin.Context) {
 		return
 	}
 
-	message, err := NewAudioMessage(ui.User, response.Data.(string))
+	message, err := communication.NewAudioMessage(ui.GetID(), ui.GetName(), response.Data.(string))
 	if err != nil {
 		log.SysF("发送语音消息失败:%s", err)
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-
-	err = hub.NewMessage(message, nil)
+	err = ui.NewMessage(message)
+	// err = hub.NewMessage(message, nil)
 	if err != nil {
 		log.SysF("发送语音消息失败:%s", err)
 		c.AbortWithError(http.StatusInternalServerError, err)

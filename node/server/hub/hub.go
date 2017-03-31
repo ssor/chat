@@ -1,8 +1,10 @@
-package core
+package hub
 
 import (
 	"errors"
 	"time"
+	"xsbPro/chat/node/server/communication"
+	user "xsbPro/chat/node/server/user"
 )
 
 var (
@@ -29,9 +31,6 @@ func newHub(group string, users UserList) *Hub {
 		GroupUsers:       users,
 		messageCache:     newMessageList(),
 	}
-	for _, u := range h.GroupUsers {
-		u.SetMessagePopHandler(h.newMessage)
-	}
 
 	return &h
 }
@@ -46,14 +45,23 @@ func (h *Hub) close() {
 	}
 }
 
-func (h *Hub) newMessage(m message) error {
-	h.messageCache.add(m)
+// PopNewMessage use to receive msg for user
+func (h *Hub) PopNewMessage(msg *communication.Message) {
+	h.messageCache.add(msg)
 
 	for _, u := range h.GroupUsers {
-		u.AddMessageToCache(m)
+		u.AddMessageToCache(msg.GetID())
 	}
+}
 
-	return nil
+// GetID return a uid for hub
+func (h *Hub) GetID() string {
+	return h.group
+}
+
+// GetMessage returns  content of message with id
+func (h *Hub) GetMessage(id string) *communication.Message {
+	return h.messageCache.find(id)
 }
 
 func (h *Hub) run() {
@@ -61,9 +69,7 @@ func (h *Hub) run() {
 	for {
 		select {
 		case <-h.eventSendMessage:
-			for _, u := range h.GroupUsers {
-				go u.BroadcastMessage()
-			}
+			h.sendMessage()
 		case <-tickerHour.C:
 		case <-h.stopCh:
 			return
@@ -71,18 +77,26 @@ func (h *Hub) run() {
 	}
 }
 
+func (h *Hub) sendMessage() {
+	for _, u := range h.GroupUsers {
+		go u.SendMessage()
+	}
+}
+
 // AddUser add user to group
-func (h *Hub) AddUser(u user) error {
-	if h.findUser(u.GetID()) == nil {
-		h.GroupUsers = h.GroupUsers.add(u)
-	} else {
-		return ErrUserAlreadyOnline
+func (h *Hub) AddUser(users ...*user.User) error {
+	for _, u := range users {
+		if h.FindUser(u.GetID()) == nil {
+			h.GroupUsers = h.GroupUsers.add(u)
+		} else {
+			return ErrUserAlreadyOnline
+		}
 	}
 	return nil
 }
 
 // RemoveUser removes user not existed
-func (h *Hub) RemoveUser(u user) error {
+func (h *Hub) RemoveUser(u *user.User) error {
 	h.GroupUsers, _ = h.GroupUsers.remove(u.GetID())
 	return nil
 }
@@ -102,6 +116,7 @@ func (h *Hub) RefreshUsers(users UserList) error {
 	return nil
 }
 
-func (h *Hub) findUser(id string) user {
+// FindUser user a user in this hub
+func (h *Hub) FindUser(id string) *user.User {
 	return h.GroupUsers.find(id)
 }

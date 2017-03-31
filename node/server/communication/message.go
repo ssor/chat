@@ -1,30 +1,9 @@
-package protocol
+package communication
 
 import (
 	"encoding/json"
 	"fmt"
 	"time"
-)
-
-var (
-	// protoUnknown = -1
-	// protoLogin  = 0
-	// protoLogout = 1
-
-	// ProtoText text
-	ProtoText = 2
-	// ProtoImage image upload
-	ProtoImage = 3
-	// ProtoAudio audio upload
-	ProtoAudio = 4
-	// ProtoShare share some thing
-	ProtoShare = 5
-	// ProtoReply reply from client
-	ProtoReply = 6
-	// ProtoBot bot chat
-	ProtoBot = 888
-	// ProtoCloseLoginOnOtherDevice server close conn and do not want client to reconnect in short time
-	ProtoCloseLoginOnOtherDevice = "loginOnOtherDevice"
 )
 
 // type messageList []*Message
@@ -40,11 +19,14 @@ type Message struct {
 	MessageBytes []byte `json:"-"`
 }
 
-func (message *Message) fill(id, name string) error {
+// Fill add user's info to msg
+func (message *Message) Fill(id, name string) error {
 	ns := time.Now().UnixNano()
 	message.Timestamp = ns
 	message.ID = id
 	message.Name = name
+	message.MessageID = fmt.Sprintf("%d%s%d", message.Protocal, id, ns)
+
 	bs, err := json.Marshal(message)
 	if err != nil {
 		return err
@@ -82,6 +64,11 @@ func (message *Message) GetContent() []byte {
 	return message.MessageBytes
 }
 
+// GetProtoType returns message's protocol
+func (message *Message) GetProtoType() int {
+	return message.Protocal
+}
+
 //String use
 func (message *Message) String() string {
 	return fmt.Sprintf("protocol: %d id: %s  content: %s", message.Protocal, message.ID, message.Content)
@@ -95,20 +82,20 @@ func (message *Message) String() string {
 // 	return newMessage(protoLogout, u.GetUserID(), u.GetUserName(), "")
 // }
 
-// func newTextMessage(u *User, content string) *message {
-// 	return newMessage(protoText, u.ID, u.Name, content)
-// }
-//
+// NewTextMessage wrap for new text message
+func NewTextMessage(id, name, content string) (*Message, error) {
+	return NewMessage(ProtoText, id, name, content)
+}
 
-// func NewImageMessage(userID, userName, name string) (*Message, error) {
-// 	// return newMessage(protoImage, u.ID, u.Name, ResourceDirMapList[imageDir].FullURL()+name)
-// 	return NewMessage(ProtoImage, userID, userName, name)
-// }
+// NewImageMessage wrap for image message
+func NewImageMessage(userID, userName, name string) (*Message, error) {
+	return NewMessage(ProtoImage, userID, userName, name)
+}
 
-// func NewAudioMessage(userID, userName, name string) (*Message, error) {
-// 	// return newMessage(protoAudio, u.ID, u.Name, ResourceDirMapList[audioDir].FullURL()+name)
-// 	return NewMessage(ProtoAudio, userID, userName, name)
-// }
+// NewAudioMessage wrap for audio message
+func NewAudioMessage(userID, userName, name string) (*Message, error) {
+	return NewMessage(ProtoAudio, userID, userName, name)
+}
 
 // func newCloseNotifyMessage() (*message, error) {
 // 	return newMessage(protoClose, "", "", "")

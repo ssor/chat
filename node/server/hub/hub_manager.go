@@ -1,4 +1,4 @@
-package core
+package hub
 
 import (
 	"runtime"
@@ -7,17 +7,17 @@ import (
 	"xsbPro/log"
 )
 
-//HubManager hold a list of hubs
+//Manager hold a list of hubs
 // It also has a ticker to remind hubs to send msg intervally
-type HubManager struct {
-	Hubs    HubList
+type Manager struct {
+	Hubs    List
 	hubSync sync.Mutex
 }
 
-// NewHubManager init a empty manager, but need run
-func NewHubManager() *HubManager {
-	hm := &HubManager{
-		Hubs:    HubList{},
+// NewManager init a empty manager, but need run
+func NewManager() *Manager {
+	hm := &Manager{
+		Hubs:    List{},
 		hubSync: sync.Mutex{},
 	}
 	go hm.Run()
@@ -25,19 +25,27 @@ func NewHubManager() *HubManager {
 }
 
 // AddHub add a new hub with id and users in group
-func (hm *HubManager) AddHub(group string, users UserList) *Hub {
+func (hm *Manager) AddHub(group string, users UserList) *Hub {
 	hm.hubSync.Lock()
 	defer hm.hubSync.Unlock()
 
-	if hm.Hubs.Contains(group) == true {
-		return nil
+	if users == nil {
+		users = UserList{}
 	}
-	hub := newHub(group, users)
-	hm.addHub(hub)
+
+	hub := hm.Hubs.Find(group)
+	if hub == nil {
+		hub = newHub(group, users)
+		hm.addHub(hub)
+	} else {
+		for _, u := range users {
+			hub.AddUser(u)
+		}
+	}
 	return hub
 }
 
-func (hm *HubManager) addHub(hub *Hub) {
+func (hm *Manager) addHub(hub *Hub) {
 	hm.Hubs = hm.Hubs.add(hub)
 
 	go func() {
@@ -45,7 +53,7 @@ func (hm *HubManager) addHub(hub *Hub) {
 			if r := recover(); r != nil {
 				stackInfo := string(stack())
 				log.MustF("hub stop running: %s", stackInfo)
-				log.LogToFile(stackInfo)
+				log.ToFile(stackInfo)
 			}
 			hm.addHub(hub)
 		}()
@@ -54,12 +62,8 @@ func (hm *HubManager) addHub(hub *Hub) {
 	}()
 }
 
-// func (hm *HubManager) GetHubs() map[string]*Hub {
-// 	return hm.Hubs.Items()
-// }
-
 // RemoveHub removes hub with group id
-func (hm *HubManager) RemoveHub(id string) error {
+func (hm *Manager) RemoveHub(id string) error {
 	hm.hubSync.Lock()
 	defer hm.hubSync.Unlock()
 
@@ -74,7 +78,7 @@ func (hm *HubManager) RemoveHub(id string) error {
 }
 
 // Run starts loop
-func (hm *HubManager) Run() {
+func (hm *Manager) Run() {
 	messageTicker := time.NewTicker(2 * time.Second) //出发消息发送轮询事件
 	for {
 		select {

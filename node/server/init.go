@@ -25,14 +25,16 @@ var (
 	uploadStaticImageFileURL string
 	uploadStaticAudioFileURL string
 
-	hubManager *HubManager
+	// hubManager     *HubManager
+	serverInstance *server
 
 	nodeID = ""
 )
 
 func init() {
-	hubManager = NewHubManager()
-	go hubManager.Run()
+	serverInstance = newServer()
+	// hubManager = NewHubManager()
+	// go hubManager.Run()
 }
 
 // Init set paras for node to run

@@ -2,7 +2,7 @@ package server
 
 import (
 	"time"
-	"xsbPro/chat/node/server/core"
+	"xsbPro/chat/node/server/hub"
 )
 
 type SummaryReport struct {
@@ -13,13 +13,13 @@ type SummaryReport struct {
 	Reports         []*InvestigationReport `json:"reports"`
 }
 
-func MakeHubsStatusReport(interviewees map[string]*core.Hub) *SummaryReport {
+func MakeHubsStatusReport(interviewees map[string]*hub.Hub) *SummaryReport {
 	reports := []*InvestigationReport{}
 	recycleCh := make(RecycleChan, len(interviewees))
 
-	for _, wee := range interviewees {
-		go wee.acceptInterview(&Questionnaire{recycleCh})
-	}
+	// for _, wee := range interviewees {
+	// 	go wee.acceptInterview(&Questionnaire{recycleCh})
+	// }
 
 	f := func() {
 		allReportRecycled := false

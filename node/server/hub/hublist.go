@@ -1,15 +1,15 @@
-package core
+package hub
 
-// HubList is an array of hub
-type HubList []*Hub
+// List is an array of hub
+type List []*Hub
 
-func (hl HubList) add(hs ...*Hub) HubList {
+func (hl List) add(hs ...*Hub) List {
 	hl = append(hl, hs...)
 	return hl
 }
 
 // Contains return true if a hub already exists
-func (hl HubList) Contains(id string) bool {
+func (hl List) Contains(id string) bool {
 	for _, hub := range hl {
 		if hub.group == id {
 			return true
@@ -19,7 +19,7 @@ func (hl HubList) Contains(id string) bool {
 }
 
 // Find return nil if no hub found
-func (hl HubList) Find(id string) *Hub {
+func (hl List) Find(id string) *Hub {
 	for _, hub := range hl {
 		if hub.group == id {
 			return hub
@@ -28,7 +28,7 @@ func (hl HubList) Find(id string) *Hub {
 	return nil
 }
 
-func (hl HubList) remove(id string) (list HubList, hub *Hub) {
+func (hl List) remove(id string) (list List, hub *Hub) {
 	for index, h := range hl {
 		if h.group == id {
 			hub = h
@@ -39,9 +39,9 @@ func (hl HubList) remove(id string) (list HubList, hub *Hub) {
 	return
 }
 
-func (hl HubList) removeByIndex(index int) (list HubList) {
-	if (index + 1) >= len(hl) { // out of range
-		list = hl[:index]
+func (hl List) removeByIndex(index int) (list List) {
+	if index >= len(hl) { // out of range
+		list = hl[:]
 	} else {
 		list = append(hl[:index], hl[index+1:]...)
 	}
