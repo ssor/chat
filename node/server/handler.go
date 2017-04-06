@@ -9,11 +9,16 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 	"xsbPro/chat/lua"
 	"xsbPro/chat/node/server/communication"
+	"xsbPro/chat/node/server/user/detail"
 	"xsbPro/log"
 	"xsbPro/xsbAdmin/libs/tools"
+
+	"xsbPro/chat/node/server/hub"
+	"xsbPro/chat/node/server/user"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -57,47 +62,72 @@ func NodeStatusReport() *SummaryReport {
 // NewUserRequest handles new connect request
 // groupID is hub id
 func NewUserRequest(groupID, userID string, c *gin.Context, scriptExecutor lua.ScriptExecutor) error {
-	var err error
-	// hm := hubManager
-	hub := serverInstance.findHub(groupID)
-	if hub == nil {
-		hub, err = loadGroupFromRedis(groupID, nodeID, scriptExecutor)
-		if err != nil {
-			return err
-		}
+	hubUser, err := loadUser(userID, groupID, nodeID, scriptExecutor)
+	if err != nil {
+		return err
+	}
+	if hubUser == nil {
+		log.InfoF("no user %s in group %s", userID, groupID)
+		return fmt.Errorf("noServiceForThisGroup")
+	}
+
+	log.TraceF("user (%s %s) in group (%s) comes in", hubUser.GetID(), hubUser.GetName(), groupID)
+
+	ws, err := upgradeToWebsocket(c.Writer, c.Request, nil)
+	if err != nil {
+		log.SysF(err.Error())
+		return err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	hubUser.SetConn(ws, cancel)
+	log.TraceF("user %s refresh connection", hubUser.GetID())
+	<-ctx.Done()
+	log.TraceF("user %s leave", hubUser.GetID())
+	return nil
+}
+
+func loadUser(userID, groupID, nodeID string, scriptExecutor lua.ScriptExecutor) (u *user.User, err error) {
+	hub, err := loadHub(groupID, nodeID, scriptExecutor)
+	if err != nil {
+		return nil, err
 	}
 	// if hub is still nil, it means this node should not load this group
 	if hub == nil {
-		c.AbortWithError(http.StatusOK, errors.New("noService"))
-		return fmt.Errorf("noServiceForThisGroup")
+		return nil, nil
 	}
 
-	user := hub.FindUser(userID)
-	// if user == nil {
-	// 	var userInfo UserInfo
-	// 	if strings.HasPrefix(userID, "iamafakeuser") { //以虚假用户身份登录
-	// 		userInfo = user.NewFakeUserInfo(userID)
-	// 	}
-
-	// 	if userInfo != nil {
-	// 		user = NewUser(userInfo, hub)
-	// 		hub.GroupUsers.Set(user.User.GetUserID(), user)
-	// 	}
-	// }
-
-	if user == nil {
-		log.InfoF("no user %s in group %s", userID, groupID)
-		c.AbortWithError(http.StatusOK, errors.New("noService"))
-		return fmt.Errorf("noServiceForThisGroup")
+	u = hub.FindUser(userID)
+	if u != nil {
+		return
 	}
 
-	log.TraceF("user (%s %s) in group (%s) comes in", user.GetID(), user.GetName(), groupID)
+	// if no user found, then
+	if strings.HasPrefix(userID, "iamafakeuser") { //以虚假用户身份登录
+		fakeUser := detail.NewFakeUser(userID)
+		u = user.NewUser(fakeUser, hub)
+		hub.AddUser(u)
+		return
+	}
+	return
+}
 
-	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+func loadHub(group, node string, scriptExecutor lua.ScriptExecutor) (h *hub.Hub, err error) {
+	h = serverInstance.findHub(group)
+	if h == nil {
+		h, err = loadGroupFromRedis(group, node, scriptExecutor)
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+func upgradeToWebsocket(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (*websocket.Conn, error) {
+
+	ws, err := upgrader.Upgrade(w, r, responseHeader)
 	if err != nil {
-		log.SysF(err.Error())
-		c.AbortWithError(http.StatusOK, errors.New("noService"))
-		return fmt.Errorf("noServiceForThisGroup")
+		return nil, err
 	}
 	ws.SetReadLimit(maxMessageSize)
 	ws.SetReadDeadline(time.Now().Add(pongWait))
@@ -105,14 +135,7 @@ func NewUserRequest(groupID, userID string, c *gin.Context, scriptExecutor lua.S
 		ws.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
-	// conn := NewConnection(ws, user, user.User.GetUserID())
-	ctx, cancel := context.WithCancel(context.Background())
-	user.SetConn(ws, cancel)
-
-	// go conn.WritePump(pingPeriod, writeWait)
-	// conn.ReadPump()
-	<-ctx.Done()
-	return nil
+	return ws, nil
 }
 
 // ImageUpload handlers image message

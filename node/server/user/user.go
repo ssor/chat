@@ -10,18 +10,32 @@ import (
 	"xsbPro/log"
 )
 
+const (
+	// Time allowed to write a message to the peer.
+	writeWait = 5 * time.Second
+
+	// Time allowed to read the next pong message from the peer.
+	pongWait = 30 * time.Second
+
+	// Send pings to peer with this period. Must be less than pongWait.
+	pingPeriod = (pongWait * 9) / 10
+)
+
 var maxMessageCountCache = 1024
 
 // NewUser init a user in hub
 func NewUser(d detail, store messageStore) *User {
-	return &User{
+	u := &User{
 		detail:         d,
 		messageStore:   store,
 		MessageRecords: []string{},
 		lastActiveTime: time.Now(),
 		lockConn:       &sync.Mutex{},
 		lockMessage:    &sync.Mutex{},
+		replys:         replyContentList{},
 	}
+	u.conn = conn.NewConnection(u.detail.GetID(), u, pingPeriod, writeWait)
+	return u
 }
 
 // User maps the user of client
@@ -30,16 +44,13 @@ func NewUser(d detail, store messageStore) *User {
 type User struct {
 	detail         detail
 	conn           *conn.Connection
-	MessageRecords []string
+	MessageRecords []string         // 待发送的消息的 ID
+	replys         replyContentList // 待发送的已接收消息的回执
 	messageStore   messageStore
 	lastActiveTime time.Time
 	lockConn       *sync.Mutex
 	lockMessage    *sync.Mutex // lock for dispose of message
 }
-
-// func (u *User) SetMessagePopHandler(func(*protocol.Message) error) {
-
-// }
 
 // GetID return id for this user
 func (u *User) GetID() string {
@@ -55,10 +66,11 @@ func (u *User) GetName() string {
 func (u *User) SetConn(skt conn.Socket, cancelSocket context.CancelFunc) {
 	u.lockConn.Lock()
 	defer u.lockConn.Unlock()
+
 	if u.conn == nil {
 		return
 	}
-	u.conn.SetConn(skt)
+	u.conn.SetConn(skt, cancelSocket)
 }
 
 // SendMessage send the first message in cache to client
@@ -74,21 +86,53 @@ func (u *User) SendMessage() {
 	u.lockMessage.Lock()
 	defer u.lockMessage.Unlock()
 
+	// log.Trace("send message ->")
+	if u.sendMessageReplys() == false {
+		u.sendMessageRecords()
+	}
+}
+
+// 发送消息回执
+func (u *User) sendMessageReplys() bool {
+	conn := u.conn
+	if conn == nil {
+		return false
+	}
+
+	first, tail := u.replys.Head()
+	if first == nil { // there's no reply
+		return false
+	}
+
+	err := conn.Send(first)
+	if err == nil {
+		u.replys = tail
+		log.TraceF("user %s reply(%d left) -> %s", u.GetID(), len(u.replys), string(first))
+		return true
+	}
+	return false
+}
+
+//  发送普通消息, 如果有数据发送, 返回 true
+func (u *User) sendMessageRecords() bool {
+	conn := u.conn
+	if conn == nil {
+		return false
+	}
+
 	if len(u.MessageRecords) <= 0 {
-		return
+		return false
 	}
 
 	msgID := u.MessageRecords[0]
 	msg := u.messageStore.GetMessage(msgID)
 	if msg != nil {
 		conn.Send(msg.GetContent())
-		// if err != nil {
-		// 	u.releaseConn()
-		// }
-	} else {
-		// 该消息已经本体已经不存在, 发送记录中不应再保存
-		go u.RemoveRecordCache(msgID)
+		return true
 	}
+	// 该消息已经本体已经不存在, 发送记录中不应再保存
+	go u.RemoveRecordCache(msgID)
+	return false
 }
 
 // RemoveRecordCache removes specified msg
@@ -104,66 +148,74 @@ func (u *User) RemoveRecordCache(msgID string) {
 	}
 }
 
-func removeStringFromSlice(slice []string, index int) []string {
-	if index >= len(slice) {
-		return slice[:]
-	}
-	return append(slice[:index], slice[index+1:]...)
-}
-
 // Release release resoures of user
 func (u *User) Release() {
 	u.lockConn.Lock()
 	defer u.lockConn.Unlock()
 	if u.conn != nil {
-		u.conn.Close("", time.Second*1)
+		u.conn.Close("")
 	}
-	// u.conn = nil
 }
 
 // NewMessage new data upload from user's conn
 func (u *User) NewMessage(mIn *communication.Message) (err error) {
 	switch mIn.Protocal {
 	case communication.ProtoShare, communication.ProtoText:
-		err = mIn.Fill(u.detail.GetID(), u.detail.GetName())
-		if err != nil {
-			log.InfoF("read message error: %s", err)
-			return
-		}
-		go u.messageStore.PopNewMessage(mIn)
-		// err = u.hub.NewMessage(&mIn, nil)
-		// if err != nil {
-		// 	log.SysF("NewMessage error: %s", err.Error())
-		// }
+		err = u.handleNormalMessage(mIn)
 	case communication.ProtoReply:
+		log.TraceF("user %s(%s) receive msg %s's reply", u.detail.GetID(), u.detail.GetName(), mIn.MessageID)
 		u.RemoveRecordCache(mIn.GetID())
-		// err = u.hub.NewMessage(&mIn, []string{u.User.GetUserID()})
-		// if err != nil {
-		// 	log.SysF("NewMessage error: %s", err.Error())
-		// }
 	default:
 	}
 	return
+}
+
+func (u *User) handleNormalMessage(mIn *communication.Message) error {
+	err := mIn.Fill(u.detail.GetID(), u.detail.GetName())
+	if err != nil {
+		log.InfoF("read message error: %s", err)
+		return err
+	}
+	log.TraceF("user %s(%s) receive new msg: %s", u.detail.GetID(), u.detail.GetName(), string(mIn.MessageBytes))
+	go u.messageStore.PopNewMessage(mIn)
+
+	replyMsg, e := communication.NewReplyMessage(mIn.MessageID)
+	if e != nil {
+		log.InfoF("NewReplyMessage error: %s", e)
+		return e
+	}
+	u.replys = u.replys.append(replyMsg.MessageBytes)
+	log.TraceF("user %s(%s) generate new reply: %s", u.detail.GetID(), u.detail.GetName(), string(replyMsg.MessageBytes))
+	return nil
 }
 
 // NewDataIn new data upload from user's conn
 func (u *User) NewDataIn(data []byte) error {
 	var mIn communication.Message
 	err := json.Unmarshal(data, &mIn)
-	// if err == nil && (mIn.Protocal == protoShare || mIn.Protocal == protoText) {
 	if err == nil {
 		return u.NewMessage(&mIn)
 	}
 	log.SysF("NewMessage error: %s %s", err.Error(), string(data))
-	return err
+	return nil
+}
+
+//  If this msg is from this user, it should not be sent to this user's client again
+func (u *User) isMsgMine(msg *communication.Message) bool {
+	return u.GetID() == msg.ID
 }
 
 // AddMessageToCache stores msg id to cache, then msges will be sent to client
-func (u *User) AddMessageToCache(msgID string) {
-	//如果为虚拟用户,那么不在线时不接收消息
-	// if u.User.IsFake() && u.conn == nil {
-	// 	return
-	// }
+func (u *User) AddMessageToCache(message *communication.Message) {
+	if !u.isMsgMine(message) {
+		return
+	}
+	//如果为虚拟用户,那么在线时才会接收消息
+	if u.detail.IsFake() && !u.online() {
+		return
+	}
+
+	msgID := message.GetID()
 
 	// r := newMessageRecord(m)
 	msg := u.messageStore.GetMessage(msgID)
@@ -177,4 +229,8 @@ func (u *User) AddMessageToCache(msgID string) {
 	if len(u.MessageRecords) > maxMessageCountCache {
 		u.MessageRecords = u.MessageRecords[:maxMessageCountCache]
 	}
+}
+
+func (u *User) online() bool {
+	return u.conn.Online()
 }

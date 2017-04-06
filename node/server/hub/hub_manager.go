@@ -79,13 +79,14 @@ func (hm *Manager) RemoveHub(id string) error {
 
 // Run starts loop
 func (hm *Manager) Run() {
-	messageTicker := time.NewTicker(2 * time.Second) //出发消息发送轮询事件
+	messageTicker := time.NewTicker(3 * time.Second) //出发消息发送轮询事件
 	for {
 		select {
 		// case <-hm.chCommand:
 		case <-messageTicker.C:
 			for _, h := range hm.Hubs {
-				h.eventSendMessage <- 0
+				// h.eventSendMessage <- 0
+				h.sendMessge()
 			}
 		}
 	}

@@ -1,7 +1,7 @@
 package connection
 
 type dataStore interface {
-	PopNewData([]byte, error)
+	NewDataIn([]byte) error
 }
 
 // type ReportObject interface {

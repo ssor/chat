@@ -12,8 +12,8 @@ func (fui *FakeUser) GetID() string {
 	return fui.id
 }
 
-func (fui *FakeUser) GetrName() string {
-	return "FakeUser"
+func (fui *FakeUser) GetName() string {
+	return fui.id
 }
 
 func (fui *FakeUser) IsFake() bool {

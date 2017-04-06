@@ -6,10 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"xsbPro/chat/node/server/communication"
 	"xsbPro/log"
-
-	"github.com/gorilla/websocket"
 )
 
 //
@@ -35,18 +32,15 @@ var (
 type Connection struct {
 	uid string
 
-	ws              Socket
-	cancelReadPump  context.CancelFunc
-	cancelWritePump context.CancelFunc
-	lastActiveTime  time.Time
+	cancelLoop       context.CancelFunc
+	socketReadWriter *SocketReadWriter
 
-	sendMsgBuffer    chan []byte // Buffered channel of outbound messages.
-	comesInMsgBuffer chan []byte // Buffered channel of outbound messages.
+	lastActiveTime time.Time
 
-	peacefullyClosed bool
-	socketLock       *sync.Mutex //in case of setting socket sync error
-	dataStore        dataStore   // if data comes in, put it to store
-	eventCallbacks   []func(string)
+	sendMsgBuffer chan []byte // Buffered channel of outbound messages.
+
+	socketLock *sync.Mutex //in case of setting socket sync error
+	dataStore  dataStore   // if data comes in, put it to store
 
 	pingPeriod    time.Duration
 	writeDuration time.Duration
@@ -55,58 +49,67 @@ type Connection struct {
 // NewConnection init a Connection
 func NewConnection(uid string, dataStore dataStore, pingPeriod time.Duration, writeDuration time.Duration) *Connection {
 	return &Connection{
-		pingPeriod:       pingPeriod,
-		writeDuration:    writeDuration,
-		sendMsgBuffer:    make(chan []byte, 1),
-		comesInMsgBuffer: make(chan []byte, 1024),
-		uid:              uid,
-		socketLock:       &sync.Mutex{},
-		dataStore:        dataStore,
+		uid:           uid,
+		pingPeriod:    pingPeriod,
+		writeDuration: writeDuration,
+		sendMsgBuffer: make(chan []byte, 1),
+		socketLock:    &sync.Mutex{},
+		dataStore:     dataStore,
 	}
 }
 
-// Run start goroutine for  writing msg from buffer to socket
-func (c *Connection) Run() {
+// Online returns false if client connecting to server
+func (c *Connection) Online() bool {
+	after := time.After(500 * time.Millisecond)
+	select {
+	// case <-c.bridgeForSockets:
+	case <-c.socketReadWriter.Online():
+		return true
+	case <-after:
+		return false
+	}
 }
 
-func (c *Connection) startReadWritePump(skt Socket) {
-	cancelRead := c.cancelReadPump
-	if cancelRead != nil {
-		cancelRead()
-		c.cancelReadPump = nil
-	}
-
-	cancelWrite := c.cancelWritePump
-	if cancelWrite != nil {
-		cancelWrite()
-		c.cancelWritePump = nil
-	}
+func (c *Connection) startReadWritePump(skt Socket, cancelSocket context.CancelFunc) {
+	srw := NewSocketReadWriter(skt, c.sendMsgBuffer, 5*time.Second)
+	c.socketReadWriter = srw
+	ctx, cancel := context.WithCancel(context.Background())
+	c.cancelLoop = cancel
 
 	go func() {
-		c.cancelWritePump = c.writePump(skt)
-	}()
-	go func() {
-		c.cancelReadPump = c.readPump(skt)
+		defer func() {
+			if cancelSocket != nil {
+				cancelSocket()
+			}
+		}()
+		for {
+			select {
+			case data := <-srw.NewData():
+				log.TraceF(" <- %s : %s", c.GetID(), string(data))
+				c.dataStore.NewDataIn(data)
+			case e := <-srw.Err():
+				if e == ErrSockerError {
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
 	}()
 }
 
 // SetConn set a real connection for this user
 // the real connection need reconnection usually
-func (c *Connection) SetConn(conn Socket) {
+func (c *Connection) SetConn(conn Socket, cancelSocket context.CancelFunc) {
 	c.socketLock.Lock()
 	defer c.socketLock.Unlock()
 
-	skt := c.ws
-	if skt != nil {
-		log.InfoF("kick off user %s ", c.uid)
-		closeMsg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, communication.ProtoCloseLoginOnOtherDevice)
-		writeSocket(skt, websocket.CloseMessage, closeMsg, c.writeDuration)
-	}
-
-	c.ws = conn
 	log.InfoF("user %s get online ", c.uid)
 	c.lastActiveTime = time.Now() //记录活动时间
-	c.startReadWritePump(conn)
+
+	// log.TraceF("Set Conn ---> ")
+	c.Close("")
+	c.startReadWritePump(conn, cancelSocket)
 }
 
 // GetID return conn's unique id
@@ -116,163 +119,160 @@ func (c *Connection) GetID() string {
 
 // Send send binary data to client
 func (c *Connection) Send(m []byte) error {
-	// c.mutex.Lock()
-	// defer c.mutex.Unlock()
-
 	buffer := c.sendMsgBuffer
 	if buffer != nil {
 		select {
 		case buffer <- m:
 			return nil
 		default:
-			// close(c.send)
-			// return errSocketSendFailed
 			return errBufferFull
 		}
 	}
 	return errors.New("NoBuffer")
 }
 
-// ReadPump pumps messages from the websocket connection to the hub.
-func (c *Connection) readPump(skt Socket) (cancel context.CancelFunc) {
-	defer func() {
-		c.invokeCallbacks(EventSocketReadError)
-	}()
-
-	var ctx context.Context
-	ctx, cancel = context.WithCancel(context.Background())
-	defer cancel() // cancel when we are finished
-
-	errCh := lanchSocketListening(ctx, skt, c.comesInMsgBuffer)
-	for {
-		select {
-		case data := <-c.comesInMsgBuffer:
-			c.dataStore.PopNewData(data, nil)
-		case <-errCh:
-			c.dataStore.PopNewData(nil, ErrSocketReadError)
-			return
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func lanchSocketListening(ctx context.Context, ws Socket, dataInBuffer chan []byte) chan error {
-	temp := make(chan error, 1)
-
-	go func() {
-		defer close(temp)
-		temp <- startListeningLoop(ctx, dataInBuffer, ws)
-	}()
-	return temp
-}
-
-func startListeningLoop(ctx context.Context, tunnel chan []byte, ws Socket) error {
-	for {
-		log.InfoF("start read message ...")
-		startRead := time.Now().Unix()
-		_, data, err := ws.ReadMessage()
-		if err != nil {
-			endRead := time.Now().Unix()
-			log.InfoF("After %d seconds, read Message over", endRead-startRead)
-			return err
-		}
-		select {
-		case tunnel <- data:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-}
-
-// WritePump pumps messages from the buffer to the websocket connection.
-func (c *Connection) writePump(skt Socket) (cancel context.CancelFunc) {
-	ticker := time.NewTicker(c.pingPeriod)
-	defer func() {
-		// c.ws = nil // ws error, should be set to nil
-		ticker.Stop()
-		c.invokeCallbacks(EventSocketWriteError)
-		writeSocket(skt, websocket.CloseMessage, []byte{}, c.writeDuration)
-		skt.Close()
-	}()
-	var ctx context.Context
-	ctx, cancel = context.WithCancel(context.Background())
-	for {
-		select {
-		case message, ok := <-c.sendMsgBuffer:
-			if !ok { //服务端主动关闭
-				writeSocket(skt, websocket.CloseMessage, []byte{}, c.writeDuration)
-				return
-			}
-			if err := writeSocket(skt, websocket.TextMessage, message, c.writeDuration); err != nil {
-				return
-			}
-		case <-ticker.C:
-			if err := writeSocket(skt, websocket.PingMessage, []byte{}, c.writeDuration); err != nil {
-				return
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
 // Close close conn, write and read goroutine should return
-func (c *Connection) Close(msg string, writeDuration time.Duration) {
-	if c.cancelReadPump != nil {
-		c.cancelReadPump()
-		c.cancelReadPump = nil
+func (c *Connection) Close(msg string) {
+	cancel := c.cancelLoop
+	if cancel != nil {
+		cancel()
 	}
-	if c.cancelWritePump != nil {
-		c.cancelWritePump()
-		c.cancelWritePump = nil
-	}
-
-	// close(c.sendMsgBuffer)
-	// close(c.comesInMsgBuffer)
-
-	// skt := c.ws
-	// if skt == nil {
-	// 	return
-	// }
-	// c.ws = nil
-	// c.mutex.Lock()
-	// defer c.mutex.Unlock()
-
-	// c.peacefullyClosed = true //state that we close the conn because we want
-	// if len(msg) > 0 {
-	// 	closeMsg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, msg)
-	// 	writeSocket(skt, websocket.CloseMessage, closeMsg, writeDuration) //服务端主动关闭
-	// } else {
-	// 	writeSocket(skt, websocket.CloseMessage, []byte{}, writeDuration) //服务端主动关闭
-	// }
-	// skt.Close()
-}
-
-// AddEventCallback will add a handler for connection event
-func (c *Connection) AddEventCallback(callback func(string)) {
-	if c.eventCallbacks == nil {
-		c.eventCallbacks = []func(string){}
-	}
-	c.eventCallbacks = append(c.eventCallbacks, callback)
-}
-
-// write writes a message with the given message type and payload.
-func writeSocket(skt Socket, mt int, payload []byte, writeDuration time.Duration) error {
-	if skt == nil {
-		return nil
-	}
-	skt.SetWriteDeadline(time.Now().Add(writeDuration))
-	return skt.WriteMessage(mt, payload)
-	// return errors.New("no phisical connection")
-}
-
-// write writes a message with the given message type and payload.
-func (c *Connection) invokeCallbacks(evt string) {
-	if c.eventCallbacks == nil {
-		return
-	}
-	for _, callback := range c.eventCallbacks {
-		go callback(evt)
+	srw := c.socketReadWriter
+	if srw != nil {
+		log.Trace("close -> release rw")
+		srw.Release()
+	} else {
+		log.Trace("close -> rw is nil")
 	}
 }
+
+// // ReadPump pumps messages from the websocket connection to the hub.
+// func (c *Connection) readPump(skt Socket) (cancel context.CancelFunc) {
+// 	defer func() {
+// 		c.invokeCallbacks(EventSocketReadError)
+// 		closeSocket(skt, false, c.uid)
+// 	}()
+
+// 	var ctx context.Context
+// 	ctx, cancel = context.WithCancel(context.Background())
+// 	defer cancel() // cancel when we are finished
+
+// 	errCh := lanchSocketListening(ctx, skt, c.comesInMsgBuffer)
+// 	for {
+// 		select {
+// 		case data := <-c.comesInMsgBuffer:
+// 			c.dataStore.NewDataIn(data)
+// 		case <-errCh:
+// 			// c.dataStore.PopNewData(nil, ErrSocketReadError)
+// 			return
+// 		case <-ctx.Done():
+// 			return
+// 		}
+// 	}
+// }
+
+// func lanchSocketListening(ctx context.Context, ws Socket, dataInBuffer chan []byte) chan error {
+// 	temp := make(chan error, 1)
+
+// 	go func() {
+// 		defer close(temp)
+// 		temp <- startListeningLoop(ctx, dataInBuffer, ws)
+// 	}()
+// 	return temp
+// }
+
+// func startListeningLoop(ctx context.Context, tunnel chan []byte, ws Socket) error {
+// 	startRead := time.Now()
+// 	defer func() {
+// 		log.InfoF("After %d seconds, read Message over", time.Now().Unix()-startRead.Unix())
+// 	}()
+// 	for {
+// 		log.InfoF("start read message ...")
+// 		_, data, err := ws.ReadMessage()
+// 		if err != nil {
+// 			// endRead = time.Now()()
+// 			// log.InfoF("After %d seconds, read Message over", endRead-startRead)
+// 			return err
+// 		}
+// 		select {
+// 		case tunnel <- data:
+// 		case <-ctx.Done():
+// 			return ctx.Err()
+// 		}
+// 	}
+// }
+
+// // WritePump pumps messages from the buffer to the websocket connection.
+// func (c *Connection) writePump(skt Socket, cancelSocket context.CancelFunc) (cancel context.CancelFunc) {
+// 	ticker := time.NewTicker(c.pingPeriod)
+// 	isCanceled := false // if server close socket because of another device login
+// 	defer func() {
+// 		ticker.Stop()
+// 		c.invokeCallbacks(EventSocketWriteError)
+// 		closeSocket(skt, isCanceled, c.uid)
+// 		cancelSocket() // stop socket in http request
+// 	}()
+// 	var ctx context.Context
+// 	ctx, cancel = context.WithCancel(context.Background())
+// 	for {
+// 		select {
+// 		case message, ok := <-c.sendMsgBuffer:
+// 			if !ok { //服务端主动关闭
+// 				return
+// 			}
+// 			if err := writeSocket(skt, websocket.TextMessage, message, c.writeDuration); err != nil {
+// 				return
+// 			}
+// 		case <-ticker.C:
+// 			if err := writeSocket(skt, websocket.PingMessage, []byte{}, c.writeDuration); err != nil {
+// 				return
+// 			}
+// 		case <-ctx.Done():
+// 			isCanceled = true
+// 			return
+// 		case c.bridgeForSockets <- true: // test if online
+// 		}
+// 	}
+// }
+
+// func closeSocket(skt Socket, closedForLoginOnOtherDevice bool, id string) {
+// 	var closeMsg []byte
+// 	if closedForLoginOnOtherDevice {
+// 		log.InfoF("kick off user %s ", id)
+// 		closeMsg = websocket.FormatCloseMessage(websocket.CloseNormalClosure, communication.ProtoCloseLoginOnOtherDevice)
+// 	} else {
+// 		closeMsg = []byte{}
+// 		log.InfoF("user %s leave", id)
+// 	}
+
+// 	writeSocket(skt, websocket.CloseMessage, closeMsg, 1*time.Second)
+// 	skt.Close()
+// }
+
+// // AddEventCallback will add a handler for connection event
+// func (c *Connection) AddEventCallback(callback func(string)) {
+// 	if c.eventCallbacks == nil {
+// 		c.eventCallbacks = []func(string){}
+// 	}
+// 	c.eventCallbacks = append(c.eventCallbacks, callback)
+// }
+
+// // write writes a message with the given message type and payload.
+// func writeSocket(skt Socket, mt int, payload []byte, writeDuration time.Duration) error {
+// 	if skt == nil {
+// 		return nil
+// 	}
+// 	skt.SetWriteDeadline(time.Now().Add(writeDuration))
+// 	return skt.WriteMessage(mt, payload)
+// 	// return errors.New("no phisical connection")
+// }
+
+// // write writes a message with the given message type and payload.
+// func (c *Connection) invokeCallbacks(evt string) {
+// 	if c.eventCallbacks == nil {
+// 		return
+// 	}
+// 	for _, callback := range c.eventCallbacks {
+// 		go callback(evt)
+// 	}
+// }

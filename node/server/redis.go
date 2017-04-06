@@ -74,8 +74,8 @@ func loadGroupFromRedis(group, node string, scriptExecutor lua.ScriptExecutor) (
 		return nil, err
 	}
 	newHub := serverInstance.hubManager.AddHub(group, nil)
-	users := hub.ToUserList(usersArray)
-	newHub.AddUser(users...)
+	// users := hub.ToUserList(usersArray)
+	newHub.AddUser(convertDbUserToHubUser(usersArray, newHub)...)
 	return newHub, nil
 }
 
@@ -98,7 +98,9 @@ func refreshHubUsers(hubID string, scriptExecutor lua.ScriptExecutor) error {
 	if err != nil {
 		return err
 	}
-	addNewUserToHub(users, h)
+	// addNewUserToHub(users, h)
+	usersNotInHub := filterUsersNotInHub(users, h)
+	addNewUserToHub(h, convertDbUserToHubUser(usersNotInHub, h)...)
 	removeUsersNotInHub(users, h)
 	return nil
 }
@@ -121,14 +123,39 @@ func removeUsersNotInHub(usersShouldIn db.UserArray, h *hub.Hub) {
 
 }
 
-func addNewUserToHub(users db.UserArray, h *hub.Hub) {
-	//new user added to this group
+func filterUsersNotInHub(users db.UserArray, h *hub.Hub) db.UserArray {
+	list := db.UserArray{}
+
 	for _, dbUser := range users {
 		if h.FindUser(dbUser.ID) == nil {
-			ru := detail.NewRealUser(dbUser)
-			h.AddUser(user.NewUser(ru, h))
+			list = append(list, dbUser)
 		}
 	}
+	return list
+}
+
+func addNewUserToHub(h *hub.Hub, users ...*user.User) {
+	h.AddUser(users...)
+	//new user added to this group
+	// for _, dbUser := range users {
+	// 	if h.FindUser(dbUser.ID) == nil {
+	// 		ru := detail.NewRealUser(dbUser)
+	// 		h.AddUser(user.NewUser(ru, h))
+	// 	}
+	// }
+}
+
+func convertDbUserToHubUser(users db.UserArray, h *hub.Hub) []*user.User {
+	list := []*user.User{}
+	if users == nil {
+		return list
+	}
+
+	for _, dbUser := range users {
+		ru := detail.NewRealUser(dbUser)
+		list = append(list, user.NewUser(ru, h))
+	}
+	return list
 }
 
 // func (h *Hub) acceptInterview(questionnaire *Questionnaire) {

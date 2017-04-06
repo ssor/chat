@@ -27,7 +27,7 @@ func newHub(group string, users UserList) *Hub {
 	h := Hub{
 		group:            group,
 		stopCh:           make(chan bool),
-		eventSendMessage: make(chan int, 1024),
+		eventSendMessage: make(chan int, 1),
 		GroupUsers:       users,
 		messageCache:     newMessageList(),
 	}
@@ -50,7 +50,7 @@ func (h *Hub) PopNewMessage(msg *communication.Message) {
 	h.messageCache.add(msg)
 
 	for _, u := range h.GroupUsers {
-		u.AddMessageToCache(msg.GetID())
+		u.AddMessageToCache(msg)
 	}
 }
 
@@ -69,7 +69,8 @@ func (h *Hub) run() {
 	for {
 		select {
 		case <-h.eventSendMessage:
-			h.sendMessage()
+			// log.TraceF("notifyUserSendMessage ... ")
+			h.notifyUserSendMessage()
 		case <-tickerHour.C:
 		case <-h.stopCh:
 			return
@@ -77,7 +78,14 @@ func (h *Hub) run() {
 	}
 }
 
-func (h *Hub) sendMessage() {
+func (h *Hub) sendMessge() {
+	select {
+	case h.eventSendMessage <- 1:
+	default:
+	}
+}
+
+func (h *Hub) notifyUserSendMessage() {
 	for _, u := range h.GroupUsers {
 		go u.SendMessage()
 	}

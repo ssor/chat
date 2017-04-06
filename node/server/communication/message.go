@@ -25,7 +25,7 @@ func (message *Message) Fill(id, name string) error {
 	message.Timestamp = ns
 	message.ID = id
 	message.Name = name
-	message.MessageID = fmt.Sprintf("%d%s%d", message.Protocal, id, ns)
+	// message.MessageID = fmt.Sprintf("%d%s%d", message.Protocal, id, ns)
 
 	bs, err := json.Marshal(message)
 	if err != nil {
@@ -81,6 +81,22 @@ func (message *Message) String() string {
 // func newLogoutMessage(u UserInfo) (*message, error) {
 // 	return newMessage(protoLogout, u.GetUserID(), u.GetUserName(), "")
 // }
+
+// NewReplyMessage return a reply msg
+func NewReplyMessage(msgID string) (*Message, error) {
+	ns := time.Now().UnixNano()
+	m := &Message{
+		Protocal:  ProtoReply,
+		Timestamp: ns,
+		MessageID: msgID,
+	}
+	bs, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	m.MessageBytes = bs
+	return m, nil
+}
 
 // NewTextMessage wrap for new text message
 func NewTextMessage(id, name, content string) (*Message, error) {
