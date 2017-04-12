@@ -1,8 +1,7 @@
 package resource
 
 import (
-	"xsbPro/common"
-
+	"github.com/ssor/chat/redis"
 	"github.com/ssor/config"
 
 	"github.com/ssor/mongopool"
@@ -10,7 +9,7 @@ import (
 
 var (
 	//RedisInstance redis instance
-	RedisInstance *common.Redis_Instance
+	RedisInstance *redis.Instance
 	// MongoPool mongo instance
 	MongoPool *mongo_pool.MongoSessionPool
 )
@@ -23,7 +22,7 @@ func Init(conf config.IConfigInfo) {
 
 func initRedis(conf config.IConfigInfo) {
 	if RedisInstance == nil {
-		RedisInstance = common.InitRedisInstance(conf.Get("redisHost").(string))
+		RedisInstance = redis.NewInstance(conf.Get("redisHost").(string))
 	}
 }
 

@@ -54,6 +54,13 @@ func NewMessage(proto int, id, name, content string) (*Message, error) {
 	return m, nil
 }
 
+// UnmarshalMessage returns Message, and error is not nil if error happends
+func UnmarshalMessage(raw []byte) (*Message, error) {
+	var msg Message
+	err := json.Unmarshal(raw, &msg)
+	return &msg, err
+}
+
 // GetID returns message's unique ID
 func (message *Message) GetID() string {
 	return message.MessageID

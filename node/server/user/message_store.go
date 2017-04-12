@@ -1,6 +1,6 @@
 package user
 
-import "xsbPro/chat/node/server/communication"
+import "github.com/ssor/chat/node/server/communication"
 
 type messageStore interface {
 	GetMessage(string) *communication.Message

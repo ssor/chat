@@ -1,13 +1,12 @@
 package main
 
 import (
-	"xsbPro/chat/node/controllers"
-	log "xsbPro/log"
+	"flag"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ssor/chat/node/controllers"
 	"github.com/ssor/config"
-
-	"flag"
+	log "github.com/ssor/log"
 )
 
 var (

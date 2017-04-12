@@ -2,7 +2,8 @@ package lua
 
 import (
 	"fmt"
-	"xsbPro/chat/lua/scripts"
+
+	"github.com/ssor/chat/lua/scripts"
 )
 
 var (

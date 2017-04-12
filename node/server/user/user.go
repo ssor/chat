@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"sync"
 	"time"
-	"xsbPro/chat/node/server/communication"
-	conn "xsbPro/chat/node/server/connection"
-	"xsbPro/log"
+
+	"github.com/ssor/chat/node/server/communication"
+	conn "github.com/ssor/chat/node/server/connection"
+	"github.com/ssor/log"
 )
 
 const (
@@ -207,7 +208,7 @@ func (u *User) isMsgMine(msg *communication.Message) bool {
 
 // AddMessageToCache stores msg id to cache, then msges will be sent to client
 func (u *User) AddMessageToCache(message *communication.Message) {
-	if !u.isMsgMine(message) {
+	if u.isMsgMine(message) {
 		return
 	}
 	//如果为虚拟用户,那么在线时才会接收消息

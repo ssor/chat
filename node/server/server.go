@@ -1,7 +1,7 @@
 package server
 
 import (
-	"xsbPro/chat/node/server/hub"
+	"github.com/ssor/chat/node/server/hub"
 )
 
 type server struct {

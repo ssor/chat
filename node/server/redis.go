@@ -2,12 +2,13 @@ package server
 
 import (
 	"fmt"
-	"xsbPro/chat/lua"
-	"xsbPro/chat/node/server/hub"
-	"xsbPro/chat/node/server/user"
-	"xsbPro/chat/node/server/user/detail"
-	"xsbPro/log"
-	db "xsbPro/xsbdb"
+
+	"github.com/ssor/chat/lua"
+	"github.com/ssor/chat/mongo"
+	"github.com/ssor/chat/node/server/hub"
+	"github.com/ssor/chat/node/server/user"
+	"github.com/ssor/chat/node/server/user/detail"
+	"github.com/ssor/log"
 )
 
 //将 redis 中的数据和本地数据进行同步,  删除已经不存在的, 更新已有的 Hub 中的用户信息
@@ -30,7 +31,7 @@ func refreshGroupsFromRedis(node string, scriptExecutor lua.ScriptExecutor) erro
 	return nil
 }
 
-func removeNotExistingHubs(groups []*db.Group) error {
+func removeNotExistingHubs(groups []*mongo.Group) error {
 	hubsCurrent := serverInstance.hubManager.Hubs
 	for _, h := range hubsCurrent {
 		if ifGroupExists(groups, h.GetID()) == false {
@@ -44,7 +45,7 @@ func removeNotExistingHubs(groups []*db.Group) error {
 	return nil
 }
 
-func refreshUsersOfExistingHubs(groups []*db.Group, scriptExecutor lua.ScriptExecutor) error {
+func refreshUsersOfExistingHubs(groups []*mongo.Group, scriptExecutor lua.ScriptExecutor) error {
 	hubsCurrent := serverInstance.hubManager.Hubs
 	for _, h := range hubsCurrent {
 		if ifGroupExists(groups, h.GetID()) {
@@ -58,7 +59,7 @@ func refreshUsersOfExistingHubs(groups []*db.Group, scriptExecutor lua.ScriptExe
 	return nil
 }
 
-func ifGroupExists(groups []*db.Group, id string) bool {
+func ifGroupExists(groups []*mongo.Group, id string) bool {
 	for _, group := range groups {
 		if group.ID == id {
 			return true
@@ -105,9 +106,9 @@ func refreshHubUsers(hubID string, scriptExecutor lua.ScriptExecutor) error {
 	return nil
 }
 
-func removeUsersNotInHub(usersShouldIn db.UserArray, h *hub.Hub) {
+func removeUsersNotInHub(usersShouldIn mongo.UserArray, h *hub.Hub) {
 	//some user removed from this group
-	findUser := func(users db.UserArray, id string) *db.User {
+	findUser := func(users mongo.UserArray, id string) *mongo.User {
 		for _, user := range users {
 			if user.ID == id {
 				return user
@@ -123,8 +124,8 @@ func removeUsersNotInHub(usersShouldIn db.UserArray, h *hub.Hub) {
 
 }
 
-func filterUsersNotInHub(users db.UserArray, h *hub.Hub) db.UserArray {
-	list := db.UserArray{}
+func filterUsersNotInHub(users mongo.UserArray, h *hub.Hub) mongo.UserArray {
+	list := mongo.UserArray{}
 
 	for _, dbUser := range users {
 		if h.FindUser(dbUser.ID) == nil {
@@ -145,7 +146,7 @@ func addNewUserToHub(h *hub.Hub, users ...*user.User) {
 	// }
 }
 
-func convertDbUserToHubUser(users db.UserArray, h *hub.Hub) []*user.User {
+func convertDbUserToHubUser(users mongo.UserArray, h *hub.Hub) []*user.User {
 	list := []*user.User{}
 	if users == nil {
 		return list

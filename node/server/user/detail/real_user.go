@@ -1,12 +1,14 @@
 package detail
 
-import db "xsbPro/xsbdb"
+import (
+	"github.com/ssor/chat/mongo"
+)
 
 type RealUser struct {
-	*db.User
+	*mongo.User
 }
 
-func NewRealUser(u *db.User) *RealUser {
+func NewRealUser(u *mongo.User) *RealUser {
 	return &RealUser{u}
 }
 

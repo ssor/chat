@@ -1,17 +1,14 @@
 package dispatcher
 
 import (
-	"fmt"
-	"xsbPro/log"
-
 	"encoding/json"
-
+	"fmt"
 	"strconv"
 
-	"xsbPro/chat/lua"
-	"xsbPro/chat/lua/scripts"
-
 	"github.com/davecgh/go-spew/spew"
+	"github.com/ssor/chat/lua"
+	"github.com/ssor/chat/lua/scripts"
+	"github.com/ssor/log"
 )
 
 //node 需要实现以下接口
@@ -129,6 +126,42 @@ func GetNodeInfoList(p func(*NodeInfo) bool, scriptExecutor ScriptExecutor) ([]*
 	return nodes, nil
 }
 
+func GetNodeInfoByKey(node_key string, scriptExecutor ScriptExecutor) (*NodeInfo, error) {
+	res, err := lua.GetNodeInfoByKey(node_key, lua.ScriptExecutor(scriptExecutor))
+	if err != nil {
+		log.SysF("GetNodeInfoByKey error: %s", err)
+		return nil, err
+	}
+
+	var ni struct {
+		LanHost string `json:"lan"` //作为区分节点的标识,同时用于检测节点的存活
+		WanHost string `json:"wan"`
+		Max     string `json:"capacity"`
+		Current string `json:"current"`
+	}
+	err = json.Unmarshal(res, &ni)
+	if err != nil {
+		log.InfoF("GetNodeInfoByKey => %s ", string(res))
+		return nil, err
+	}
+	var max, current int
+	if len(ni.Max) > 0 {
+		max, err = strconv.Atoi(ni.Max)
+		if err != nil {
+			log.InfoF("GetNodeInfoByKey => %s ", string(res))
+			return nil, err
+		}
+	}
+	current, err = strconv.Atoi(ni.Current)
+	if err != nil {
+		log.InfoF("GetNodeInfoByKey => %s ", string(res))
+		return nil, err
+	}
+	nni := NewNodeInfo(ni.LanHost, ni.WanHost, max)
+	nni.Current = current
+	return nni, nil
+}
+
 // //通过 group 和 node 的对应,找到 group 分配到的节点
 // func GetNodeByGroup(group string, scriptExecutor ScriptExecutor) (wan string, e error) {
 // 	args := redis.Args{}.Add(lua.Get_group_key(group))
@@ -139,44 +172,6 @@ func GetNodeInfoList(p func(*NodeInfo) bool, scriptExecutor ScriptExecutor) ([]*
 // 	}
 
 // 	return string(res.([]uint8)), nil
-// }
-
-// func GetNodeInfoByKey(node_key string, scriptExecutor ScriptExecutor) (*NodeInfo, error) {
-
-// 	var err error
-// 	res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_get_nodeinfo], redis.Args{}.Add(node_key)...)
-// 	if err != nil {
-// 		log.SysF("GetNodeInfoByKey error: %s", err)
-// 		return nil, err
-// 	}
-
-// 	var ni struct {
-// 		LanHost string `json:"lan"` //作为区分节点的标识,同时用于检测节点的存活
-// 		WanHost string `json:"wan"`
-// 		Max     string `json:"capacity"`
-// 		Current string `json:"current"`
-// 	}
-// 	err = json.Unmarshal(res.([]uint8), &ni)
-// 	if err != nil {
-// 		log.InfoF("GetNodeInfoByKey => %s ", string(res.([]uint8)))
-// 		return nil, err
-// 	}
-// 	var max, current int
-// 	if len(ni.Max) > 0 {
-// 		max, err = strconv.Atoi(ni.Max)
-// 		if err != nil {
-// 			log.InfoF("GetNodeInfoByKey => %s ", string(res.([]uint8)))
-// 			return nil, err
-// 		}
-// 	}
-// 	current, err = strconv.Atoi(ni.Current)
-// 	if err != nil {
-// 		log.InfoF("GetNodeInfoByKey => %s ", string(res.([]uint8)))
-// 		return nil, err
-// 	}
-// 	nni := NewNodeInfo(ni.LanHost, ni.WanHost, max)
-// 	nni.Current = current
-// 	return nni, nil
 // }
 
 // func getAllNodeKeys(redisDo RedisDo) ([]string, error) {

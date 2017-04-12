@@ -5,10 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-
-	"xsbPro/chat/node/resource"
-	"xsbPro/chat/node/server"
-	"xsbPro/log"
+	"github.com/ssor/chat/node/resource"
+	"github.com/ssor/chat/node/server"
+	"github.com/ssor/log"
 )
 
 // const (

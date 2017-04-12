@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"xsbPro/log"
+	"github.com/ssor/log"
 )
 
 //

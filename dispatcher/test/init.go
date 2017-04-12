@@ -1,9 +1,8 @@
 package tests
 
 import (
-	"xsbPro/chat/dispatcher/dispatcher"
-	"xsbPro/chat/dispatcher/resource"
-
+	"github.com/ssor/chat/dispatcher/dispatcher"
+	"github.com/ssor/chat/dispatcher/resource"
 	"github.com/ssor/config"
 )
 
@@ -28,7 +27,7 @@ func init() {
 	resource.Init(conf)
 
 	dispatcher.ClearHistoryData(func() error {
-		_, err := resource.RedisInstance.RedisDo("FLUSHDB")
+		_, err := resource.RedisInstance.Do("FLUSHDB")
 		return err
 	})
 

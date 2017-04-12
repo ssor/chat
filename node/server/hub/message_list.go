@@ -2,7 +2,8 @@ package hub
 
 import (
 	"sync"
-	"xsbPro/chat/node/server/communication"
+
+	"github.com/ssor/chat/node/server/communication"
 )
 
 type messageList struct {

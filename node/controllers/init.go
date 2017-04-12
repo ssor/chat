@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"xsbPro/chat/node/resource"
-	"xsbPro/chat/node/server"
-	"xsbPro/log"
 
 	"github.com/parnurzeal/gorequest"
+	"github.com/ssor/chat/node/resource"
+	"github.com/ssor/chat/node/server"
 	"github.com/ssor/config"
+	"github.com/ssor/log"
 )
 
 var (

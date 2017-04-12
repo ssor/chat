@@ -4,7 +4,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
-	"xsbPro/log"
+
+	"github.com/ssor/log"
 )
 
 //Manager hold a list of hubs

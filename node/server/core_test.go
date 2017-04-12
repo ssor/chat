@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
-	"xsbPro/chat/node/server/user"
+
+	"github.com/ssor/chat/node/server/user"
 )
 
 // coreUser

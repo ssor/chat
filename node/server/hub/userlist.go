@@ -1,7 +1,7 @@
 package hub
 
 import (
-	user "xsbPro/chat/node/server/user"
+	user "github.com/ssor/chat/node/server/user"
 )
 
 // UserList list of users used in core

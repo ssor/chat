@@ -4,11 +4,10 @@ import (
 	"context"
 	"errors"
 	"time"
-	"xsbPro/chat/node/server/communication"
-	"xsbPro/log"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/websocket"
+	"github.com/ssor/chat/node/server/communication"
+	"github.com/ssor/log"
 )
 
 var (
@@ -20,6 +19,7 @@ type SocketReadWriter struct {
 	pingPeriod          time.Duration
 	comesInMsgBuffer    chan []byte // msg tunnel for msg from client to send to upstream
 	sendMsgBuffer       chan []byte // msg tunnel for msg from upstream to sent to client
+	dataBufferUnsafe    chan []byte // cache data to send to client, but not 100% successful
 	onlineTest          chan bool   // used to test if socket is running
 	errTunnel           chan error  // if there is an error, the error will be transported through this channel
 	cancelReadWriteLoop context.CancelFunc
@@ -30,6 +30,7 @@ func NewSocketReadWriter(conn Socket, sendMsgBuffer chan []byte, ping time.Durat
 		socket:           conn,
 		pingPeriod:       ping,
 		comesInMsgBuffer: make(chan []byte, 1),
+		dataBufferUnsafe: make(chan []byte, 1024),
 		sendMsgBuffer:    sendMsgBuffer,
 		errTunnel:        make(chan error, 1),
 		onlineTest:       make(chan bool),
@@ -54,6 +55,11 @@ func (srw *SocketReadWriter) Err() <-chan error {
 
 func (srw *SocketReadWriter) NewData() <-chan []byte {
 	return srw.comesInMsgBuffer
+}
+
+// SendDataUnsafe caches data in a channel which will be sent to client, but not 100%
+func (srw *SocketReadWriter) SendDataUnsafe(data []byte) {
+	srw.dataBufferUnsafe <- data
 }
 
 func (srw *SocketReadWriter) Release() {
@@ -103,7 +109,7 @@ func (srw *SocketReadWriter) writePump(ctx context.Context) {
 	ticker := time.NewTicker(srw.pingPeriod)
 	defer func() {
 		ticker.Stop()
-		spew.Dump(ctx.Err())
+		// spew.Dump(ctx.Err())
 		srw.close(ctx.Err() == context.Canceled)
 	}()
 	for {
@@ -112,12 +118,27 @@ func (srw *SocketReadWriter) writePump(ctx context.Context) {
 			if !ok { //服务端主动关闭
 				return
 			}
-
-			if err := srw.write(websocket.TextMessage, message, 1*time.Second); err != nil {
-				srw.errTunnel <- ErrSockerError
+			if !srw.sendDataCheck(message) {
 				return
 			}
-			log.TraceF("-> data: %s", string(message))
+
+			// if err := srw.write(websocket.TextMessage, message, 1*time.Second); err != nil {
+			// 	srw.errTunnel <- ErrSockerError
+			// 	return
+			// }
+			// log.TraceF("-> data: %s", string(message))
+		case message, ok := <-srw.dataBufferUnsafe:
+			if !ok { //服务端主动关闭
+				return
+			}
+			if !srw.sendDataCheck(message) {
+				return
+			}
+			// if err := srw.write(websocket.TextMessage, message, 1*time.Second); err != nil {
+			// 	srw.errTunnel <- ErrSockerError
+			// 	return
+			// }
+			// log.TraceF("-> data: %s", string(message))
 		case <-ticker.C:
 			if err := srw.write(websocket.PingMessage, []byte{}, 1*time.Second); err != nil {
 				srw.errTunnel <- ErrSockerError
@@ -130,6 +151,14 @@ func (srw *SocketReadWriter) writePump(ctx context.Context) {
 	}
 }
 
+func (srw *SocketReadWriter) sendDataCheck(data []byte) bool {
+	if err := srw.write(websocket.TextMessage, data, 1*time.Second); err != nil {
+		srw.errTunnel <- ErrSockerError
+		return false
+	}
+	log.TraceF("-> data: %s", string(data))
+	return true
+}
 func (srw *SocketReadWriter) close(closedForLoginOnOtherDevice bool) {
 	var closeMsg []byte
 	if closedForLoginOnOtherDevice {

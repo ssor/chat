@@ -11,17 +11,15 @@ import (
 	"os"
 	"strings"
 	"time"
-	"xsbPro/chat/lua"
-	"xsbPro/chat/node/server/communication"
-	"xsbPro/chat/node/server/user/detail"
-	"xsbPro/log"
-	"xsbPro/xsbAdmin/libs/tools"
-
-	"xsbPro/chat/node/server/hub"
-	"xsbPro/chat/node/server/user"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/ssor/chat/lua"
+	"github.com/ssor/chat/node/server/communication"
+	"github.com/ssor/chat/node/server/hub"
+	"github.com/ssor/chat/node/server/user"
+	"github.com/ssor/chat/node/server/user/detail"
+	"github.com/ssor/log"
 )
 
 const (
@@ -171,7 +169,7 @@ func ImageUpload(groupID, userID, para string, c *gin.Context) {
 		return
 	}
 
-	res, body, err := tools.UploadFile(fmt.Sprintf(uploadStaticImageFileURL, userID, para), header1.Filename, nil, f)
+	res, body, err := uploadFile(fmt.Sprintf(uploadStaticImageFileURL, userID, para), header1.Filename, nil, f)
 	if err != nil {
 		log.InfoF("upload image to server error: %s", err)
 		c.AbortWithError(http.StatusInternalServerError, errors.New("上传图片失败"))
@@ -249,7 +247,7 @@ func AudioUpload(groupID, userID, para string, c *gin.Context) {
 		return
 	}
 
-	res, body, err := tools.UploadFile(fmt.Sprintf(uploadStaticAudioFileURL, userID, para), header1.Filename, nil, f)
+	res, body, err := uploadFile(fmt.Sprintf(uploadStaticAudioFileURL, userID, para), header1.Filename, nil, f)
 	if err != nil {
 		log.InfoF("upload audio to server error: %s", err)
 		c.AbortWithError(http.StatusInternalServerError, errors.New("上传失败"))

@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"xsbPro/chat/dispatcher/dispatcher"
-	"xsbPro/chat/dispatcher/resource"
-	"xsbPro/chat/lua"
-	"xsbPro/log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ssor/chat/dispatcher/dispatcher"
+	"github.com/ssor/chat/dispatcher/resource"
+	"github.com/ssor/chat/lua"
+	"github.com/ssor/log"
 )
 
 func GetNodesInfo(c *gin.Context) {
@@ -82,7 +82,7 @@ func NewNodeOnLine(c *gin.Context) {
 		return
 	}
 
-	err = lua.UpdateNodeCapacity(ni.Lan, ni.Capability, resource.RedisInstance.DoScript)
+	err = dispatcher.UpdateNodeCapacity(ni.Lan, ni.Capability, resource.RedisInstance.DoScript)
 	if err != nil {
 		log.SysF("NodeUpdateCapacity error: %s", err.Error())
 		c.JSON(http.StatusBadRequest, err.Error())
@@ -110,7 +110,7 @@ func NodeUpdateCapacity(c *gin.Context) {
 		return
 	}
 
-	err = lua.UpdateNodeCapacity(ni.Node, ni.Capacity, resource.RedisInstance.DoScript)
+	err = dispatcher.UpdateNodeCapacity(ni.Node, ni.Capacity, resource.RedisInstance.DoScript)
 	if err != nil {
 		log.SysF("NodeUpdateCapacity error: %s", err.Error())
 		c.JSON(http.StatusBadRequest, err.Error())

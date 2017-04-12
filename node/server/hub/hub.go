@@ -3,8 +3,9 @@ package hub
 import (
 	"errors"
 	"time"
-	"xsbPro/chat/node/server/communication"
-	user "xsbPro/chat/node/server/user"
+
+	"github.com/ssor/chat/node/server/communication"
+	user "github.com/ssor/chat/node/server/user"
 )
 
 var (

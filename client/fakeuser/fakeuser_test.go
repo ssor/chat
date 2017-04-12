@@ -1,14 +1,12 @@
 package fakeuser
 
 import (
-	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
-	"xsbPro/chat/client/protocol"
-	"xsbPro/chat/node/server/communication"
 
-	"github.com/parnurzeal/gorequest"
+	"github.com/ssor/chat/client/protocol"
+	"github.com/ssor/chat/node/server/communication"
 )
 
 var (
@@ -18,29 +16,11 @@ var (
 )
 
 func requestNodeHost(t *testing.T) string {
-	_, res, errs := gorequest.New().Get(protocol.FormatLoginURL(dispatcherHost, id, group)).End()
-	if errs != nil {
-		t.Fatal(errs)
-	}
-	// t.Log(res)
-	var resMessage struct {
-		Code int `json:"code"`
-		Data struct {
-			Hosts []string `json:"hosts"`
-		} `json:"data"`
-	}
-	err := json.Unmarshal([]byte(res), &resMessage)
+	host, err := protocol.RequestNodeHost(dispatcherHost, group)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resMessage.Code != 0 {
-		t.Fatal("no dispatched node")
-	}
-	if resMessage.Data.Hosts == nil || len(resMessage.Data.Hosts) <= 0 {
-		t.Fatal("no node: ", res)
-	}
-
-	return resMessage.Data.Hosts[0]
+	return host
 }
 
 func TestSendMsg(t *testing.T) {
@@ -68,19 +48,6 @@ func TestDuplicatedLogin(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 }
-
-// func TestReply(t *testing.T) {
-// 	host := requestNodeHost(t)
-// 	url := protocol.FormatConnectURL(host, id, group)
-// 	fu := NewFakeUser(id, url)
-
-// 	msg := createMsg(t, "abc")
-// 	err := fu.SendMsg(msg.MessageBytes)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	time.Sleep(3 * time.Second)
-// }
 
 func createMsg(t *testing.T, content string) *communication.Message {
 
