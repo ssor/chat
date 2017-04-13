@@ -37,7 +37,7 @@ func newfileUploadRequest(uri string, params map[string]string, paramName, fileN
 	return req, nil
 }
 
-func uploadFile(url, fileName string, extraParams map[string]string, file io.Reader) (*http.Response, []byte, error) {
+func uploadFileToServer(url, fileName string, extraParams map[string]string, file io.Reader) (*http.Response, []byte, error) {
 	request, err := newfileUploadRequest(url, extraParams, "file", fileName, file)
 	if err != nil {
 		return nil, nil, err

@@ -122,7 +122,6 @@ func loadHub(group, node string, scriptExecutor lua.ScriptExecutor) (h *hub.Hub,
 }
 
 func upgradeToWebsocket(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (*websocket.Conn, error) {
-
 	ws, err := upgrader.Upgrade(w, r, responseHeader)
 	if err != nil {
 		return nil, err
@@ -136,61 +135,71 @@ func upgradeToWebsocket(w http.ResponseWriter, r *http.Request, responseHeader h
 	return ws, nil
 }
 
-// ImageUpload handlers image message
-func ImageUpload(groupID, userID, para string, c *gin.Context) {
-
+func findUser(groupID, userID string) (*user.User, error) {
 	hub := serverInstance.findHub(groupID)
 	if hub == nil {
 		log.SysF("group %s does NOT exists", groupID)
-		c.AbortWithError(http.StatusOK, errors.New("no group ID"))
-		return
+		return nil, errors.New("no group ID")
 	}
 
 	ui := hub.FindUser(userID)
 	if ui == nil {
-		log.SysF("user %s does NOT exists", userID)
-		c.AbortWithError(http.StatusBadRequest, errors.New("no user ID"))
-		return
+		return nil, errors.New("no such user")
 	}
+	return ui, nil
+}
 
-	log.TraceF("UploadImage -> uid: %s %s", userID, ui.GetName())
+type imageUploadResponse struct {
+	State string `json:"state"`
+	URL   string `json:"url"`
+}
 
-	// para := c.Query("para")
+func uploadRequestedImage(userID, para string, c *gin.Context) (*imageUploadResponse, error) {
 
 	header1, err := getUploadFileHeader(c.Request)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, errors.New("上传文件出错"))
-		return
+		return nil, err
 	}
 	f, err := header1.Open()
 	if err != nil {
 		log.InfoF("open uploaded file error: %s", err)
-		c.AbortWithError(http.StatusInternalServerError, errors.New("上传图片失败"))
-		return
+		return nil, err
 	}
+	defer f.Close()
 
-	res, body, err := uploadFile(fmt.Sprintf(uploadStaticImageFileURL, userID, para), header1.Filename, nil, f)
+	_, body, err := uploadFileToServer(fmt.Sprintf(uploadStaticImageFileURL, userID, para), header1.Filename, nil, f)
 	if err != nil {
 		log.InfoF("upload image to server error: %s", err)
-		c.AbortWithError(http.StatusInternalServerError, errors.New("上传图片失败"))
-		return
+		return nil, err
 	}
-	log.TraceF("upload avatar to statics server: %s : %s", res.Status, string(body))
+	// log.TraceF("upload avatar to statics server: %s : %s", res.Status, string(body))
 
-	type ImageUploadResponse struct {
-		State string `json:"state"`
-		URL   string `json:"url"`
-	}
-	var r ImageUploadResponse
+	var r imageUploadResponse
 	err = json.Unmarshal(body, &r)
 	if err != nil {
 		log.InfoF("Unmarshal json error: %s", err)
-		c.AbortWithError(http.StatusInternalServerError, errors.New("上传图片失败"))
-		return
+		return nil, err
 	}
 
 	if len(r.URL) <= 0 {
-		log.InfoF("upload image failed")
+		log.InfoF("upload image no url")
+		return nil, errors.New("上传图片失败")
+	}
+	return &r, nil
+}
+
+// ImageUpload handlers image message
+func ImageUpload(groupID, userID, para string, c *gin.Context) {
+	ui, err := findUser(groupID, userID)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+	log.TraceF("UploadImage -> uid: %s %s", userID, ui.GetName())
+
+	r, err := uploadRequestedImage(userID, para, c)
+	if err != nil {
+		log.InfoF("uploadRequestedImage error: %s", err)
 		c.AbortWithError(http.StatusInternalServerError, errors.New("上传图片失败"))
 		return
 	}
@@ -203,89 +212,62 @@ func ImageUpload(groupID, userID, para string, c *gin.Context) {
 	}
 
 	err = ui.NewMessage(message)
-	// err = hub.NewMessage(message, nil)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
 	log.TraceF("user %s add IMAGE message", userID)
-
 	c.JSON(http.StatusOK, nil)
 }
 
-// AudioUpload handles audio msg
-func AudioUpload(groupID, userID, para string, c *gin.Context) {
-
-	hub := serverInstance.findHub(groupID)
-	if hub == nil {
-		log.SysF("group %s does NOT exists", groupID)
-		c.AbortWithError(http.StatusOK, errors.New("no group ID"))
-		return
-	}
-
-	ui := hub.FindUser(userID)
-	if ui == nil {
-		log.SysF("user %s does NOT exists", userID)
-		c.AbortWithError(http.StatusBadRequest, errors.New("no user ID"))
-		return
-	}
-
-	// log.TraceF("UploadAudio -> userID %s  para: %s ", userID, para)
-
-	// log.TraceF("user %s UploadAudio", ui.Name)
+func uploadRequestedAudio(userID, para string, c *gin.Context) (*response, error) {
 	header1, err := getUploadFileHeader(c.Request)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, errors.New("上传文件出错"))
-		return
+		return nil, err
 	}
 
 	f, err := header1.Open()
 	if err != nil {
-		log.InfoF("open uploaded file error: %s", err)
-		c.AbortWithError(http.StatusInternalServerError, errors.New("上传失败"))
+		return nil, err
+	}
+	defer f.Close()
+
+	_, body, err := uploadFileToServer(fmt.Sprintf(uploadStaticAudioFileURL, userID, para), header1.Filename, nil, f)
+	if err != nil {
+		return nil, err
+	}
+	// log.TraceF("upload audio to statics server: %s : %s", res.Status, string(body))
+
+	var response response
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return nil, err
+	}
+	if response.Data == nil {
+		return nil, errors.New("no response")
+	}
+
+	if len(response.Data.(string)) <= 0 {
+		return nil, errors.New("no url found")
+	}
+	return &response, nil
+}
+
+// AudioUpload handles audio msg
+func AudioUpload(groupID, userID, para string, c *gin.Context) {
+	ui, err := findUser(groupID, userID)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
 
-	res, body, err := uploadFile(fmt.Sprintf(uploadStaticAudioFileURL, userID, para), header1.Filename, nil, f)
+	response, err := uploadRequestedAudio(userID, para, c)
 	if err != nil {
 		log.InfoF("upload audio to server error: %s", err)
 		c.AbortWithError(http.StatusInternalServerError, errors.New("上传失败"))
 		return
 	}
-	log.TraceF("upload audio to statics server: %s : %s", res.Status, string(body))
-	// fileName := para + "_" + userID + "_" + strconv.FormatInt(time.Now().UnixNano(), 16) + filepath.Ext(header1.Filename)
-
-	// log.TraceF("create audio fileName: %s", fileName)
-	// tofile := path.Join(chatFilesPathAudio, fileName)
-
-	// err = receiveUploadFile(tofile, header1)
-	// if err != nil {
-	// 	log.SysF("接收语音文件失败:%s", err)
-	// 	c.AbortWithError(http.StatusBadRequest, errors.New("上传文件出错"))
-	// 	return
-	// }
-
-	type Response struct {
-		Code    int         `json:"code"`
-		Message string      `json:"message"`
-		Data    interface{} `json:"data"`
-	}
-
-	var response Response
-	err = json.Unmarshal(body, &response)
-	if err != nil || response.Data == nil {
-		log.InfoF("Unmarshal json error: %s", err)
-		c.AbortWithError(http.StatusInternalServerError, errors.New("上传失败"))
-		return
-	}
-
-	if len(response.Data.(string)) <= 0 {
-		log.InfoF("upload audio failed")
-		c.AbortWithError(http.StatusInternalServerError, errors.New("上传失败"))
-		return
-	}
-
 	message, err := communication.NewAudioMessage(ui.GetID(), ui.GetName(), response.Data.(string))
 	if err != nil {
 		log.SysF("发送语音消息失败:%s", err)
@@ -293,7 +275,6 @@ func AudioUpload(groupID, userID, para string, c *gin.Context) {
 		return
 	}
 	err = ui.NewMessage(message)
-	// err = hub.NewMessage(message, nil)
 	if err != nil {
 		log.SysF("发送语音消息失败:%s", err)
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -301,7 +282,6 @@ func AudioUpload(groupID, userID, para string, c *gin.Context) {
 	}
 
 	log.TraceF("user %s add AUDIO message", userID)
-
 	c.JSON(http.StatusOK, nil)
 }
 
