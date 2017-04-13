@@ -6,9 +6,23 @@ Chat is a websocket based chat system. It's simple but powerful. It can let mill
 ## Design
 The whole chat system includes two parts: dispatcher and node. 
 
-### dispatcher
-
 ### node
+node is responsible for:
+
+    1. create connection with clients
+    2. handle text message, audio message, and image share message
+    3. broadcast message from client to other clients in same group
+
+### dispatcher
+dispatcher is responsible for:
+
+    1. load data to redis cache from mongo
+    2. handle nsq events when data in mongo changed, and refresh data in cache
+    3. check nodes status, add new node, remove dead node
+    4. dispatch group to node, and balance groups on nodes
+    5. handle clients requests for node info for logging
+
+
 
 ## Requirement
 
