@@ -53,12 +53,19 @@ If build successfully, binary file will be in dir:
 
 ## Run
 
-### 1. run mongo
+### preparement
+* run mongo
+* run redis
+* run nsq
 
-### 2. run redis
+### system
 
-### 3. run nsq
+* run dispatcher
+* run node
 
-### 4. run dispatcher
 
-### 5. run node
+## Roadmap
+
+1. system status checker, check if the whole system is running as expected, and output essiential KPI of status
+
+2. message persitent, in case that all messages lost if node restart
