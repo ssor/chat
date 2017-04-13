@@ -9,13 +9,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"xsbPro/chat/node/resource"
-	"xsbPro/chat/node/server"
-	"xsbPro/log"
-
-	"xsbPro/common"
 
 	"github.com/parnurzeal/gorequest"
+	"github.com/ssor/chat/node/resource"
+	"github.com/ssor/chat/node/server"
+	"github.com/ssor/config"
+	"github.com/ssor/log"
 )
 
 var (
@@ -24,7 +23,7 @@ var (
 )
 
 var (
-	conf               common.IConfigInfo
+	conf               config.IConfigInfo
 	ResourceDirMapList = make(map[string]*ResourceDirMap)
 
 	isCenterAlive = false // 如果 dispatcher 主动监测 node 存在,说明 dispatcher 是活动的,那么 node 也同时可以确定 dispatcher 是活动的,通过这个思路可以减少互相监测造成的资源浪费
@@ -52,10 +51,10 @@ var (
 func init() {
 }
 
-func Init(_conf common.IConfigInfo) {
+func Init(_conf config.IConfigInfo) {
 	conf = _conf
-	ResourceDirMapList[imageDir] = newResourceDirMap(imageDir, shareImagePath, conf.GetDomain())
-	ResourceDirMapList[audioDir] = newResourceDirMap(audioDir, shareAudioPath, conf.GetDomain())
+	ResourceDirMapList[imageDir] = newResourceDirMap(imageDir, shareImagePath, conf.Get("domain").(string))
+	ResourceDirMapList[audioDir] = newResourceDirMap(audioDir, shareAudioPath, conf.Get("domain").(string))
 
 	initAppDir()
 
@@ -67,8 +66,8 @@ func Init(_conf common.IConfigInfo) {
 		panic("redis is nil after init")
 	}
 
-	server.Init(_conf, _conf.GetNodeLanHost())
-	err := registerToNodeCenter(conf.GetRegisterCenterHost(), conf.GetNodeLanHost(), conf.GetNodeWanHost(), conf.GetGroupLoadCapability())
+	server.Init(_conf, _conf.Get("nodeLanHost").(string))
+	err := registerToNodeCenter(conf.Get("registerCenterHost").(string), conf.Get("nodeLanHost").(string), conf.Get("nodeWanHost").(string), conf.Get("nodeCapability").(int))
 	if err != nil {
 		log.SysF("registerToNodeCenter err: %s", err)
 	}
@@ -83,8 +82,12 @@ func keepNodeRegisteredInCenter() {
 			isCenterAlive = false
 			continue
 		}
-		if checkNodeRegisteredInCenter(conf.GetRegisterCenterHost(), conf.GetNodeLanHost()) == false {
-			err := registerToNodeCenter(conf.GetRegisterCenterHost(), conf.GetNodeLanHost(), conf.GetNodeWanHost(), conf.GetGroupLoadCapability())
+		registerCenterHost := conf.Get("registerCenterHost").(string)
+		nodeLanHost := conf.Get("nodeLanHost").(string)
+		nodeWanHost := conf.Get("nodeWanHost").(string)
+		nodeCapability := conf.Get("nodeCapability").(int)
+		if checkNodeRegisteredInCenter(registerCenterHost, nodeLanHost) == false {
+			err := registerToNodeCenter(registerCenterHost, nodeLanHost, nodeWanHost, nodeCapability)
 			if err != nil {
 				log.SysF("registerToNodeCenter err: %s", err)
 			}
@@ -99,9 +102,9 @@ func UpdateCapacity(cap int) {
 		Capacity int    `json:"capability" binding:"required"`
 	}
 	go func() {
-		log.InfoF("node %s capacity updated to %d", conf.GetNodeLanHost(), cap)
-		url := fmt.Sprintf("http://%s/nodeUpdateCapacity", conf.GetRegisterCenterHost())
-		_, _, errs := gorequest.New().Post(url).Send(requestInfo{Node: conf.GetNodeLanHost(), Capacity: cap}).End()
+		log.InfoF("node %s capacity updated to %d", conf.Get("nodeLanHost").(string), cap)
+		url := fmt.Sprintf("http://%s/nodeUpdateCapacity", conf.Get("registerCenterHost"))
+		_, _, errs := gorequest.New().Post(url).Send(requestInfo{Node: conf.Get("nodeLanHost").(string), Capacity: cap}).End()
 		if errs != nil && len(errs) > 0 {
 			log.InfoF("requestGroupDispatchLoop error:%s", errs[0])
 		}
@@ -127,30 +130,6 @@ func checkNodeRegisteredInCenter(center, host string) bool {
 	}
 	return true
 }
-
-// //向分配中心申请负责某个支部的聊天
-// func requestGroupDispatchLoop(center, host string) {
-
-// 	type requestInfo struct {
-// 		Node  string `json:"node" binding:"required"`
-// 		Group string `json:"group" binding:"required"`
-// 	}
-
-// 	ticker := time.NewTicker(10 * time.Second)
-// 	for {
-// 		select {
-// 		case <-ticker.C:
-// 			group := <-dispatch_request_group_cache
-// 			go func() {
-// 				url := fmt.Sprintf("http://%s/nodeDispatchRequest", center)
-// 				_, _, errs := gorequest.New().Post(url).Send(requestInfo{Node: host, Group: group}).End()
-// 				if errs != nil && len(errs) > 0 {
-// 					log.InfoF("requestGroupDispatchLoop error:%s", errs[0])
-// 				}
-// 			}()
-// 		}
-// 	}
-// }
 
 // //向 node 管理中心注册
 func registerToNodeCenter(center, lan, wan string, loadCapability int) error {

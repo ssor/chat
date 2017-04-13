@@ -3,41 +3,39 @@ package tests
 import (
 	"fmt"
 	"testing"
-	"xsbPro/chat/dispatcher/dispatcher"
-	"xsbPro/chat/dispatcher/release/lua"
-	"xsbPro/chat/dispatcher/resource"
-	"xsbPro/common"
-	db "xsbPro/xsbdb"
-
-	mgo "gopkg.in/mgo.v2"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/ssor/chat/dispatcher/dispatcher"
+	"github.com/ssor/chat/dispatcher/resource"
+	"github.com/ssor/chat/lua"
+	"github.com/ssor/chat/mongo"
+	mgo "gopkg.in/mgo.v2"
 )
 
 var (
-	users         db.UserArray
-	groups        []*db.Group
-	groupUsersMap map[string]db.UserArray
+	users         mongo.UserArray
+	groups        []*mongo.Group
+	groupUsersMap map[string]mongo.UserArray
 	nodes         []*dispatcher.NodeInfo
 )
 
 func init() {
-	users = db.UserArray{}
-	groups = []*db.Group{}
-	groupUsersMap = make(map[string]db.UserArray)
+	users = mongo.UserArray{}
+	groups = []*mongo.Group{}
+	groupUsersMap = make(map[string]mongo.UserArray)
 	//prepare some data
 	// 5 groups created, and each group has 3 users
 	for groupIndex := 1; groupIndex <= 5; groupIndex++ {
-		groups = append(groups, &db.Group{
+		groups = append(groups, &mongo.Group{
 			ID:   fmt.Sprintf("group_id_%d", groupIndex),
 			Name: fmt.Sprintf("group_name_%d", groupIndex),
 		})
 	}
 
 	for _, group := range groups {
-		groupUsersMap[group.ID] = db.UserArray{}
+		groupUsersMap[group.ID] = mongo.UserArray{}
 		for userIndex := 1; userIndex <= 3; userIndex++ {
-			user := &db.User{
+			user := &mongo.User{
 				ID:    fmt.Sprintf("user_id_%d_%s", userIndex, group.ID),
 				Name:  fmt.Sprintf("user_name_%d_%s", userIndex, group.Name),
 				Group: group.ID,
@@ -64,7 +62,7 @@ func init() {
 	nodes = append(nodes, dispatcher.NewNodeInfo("lan_03", "wan_03", 4))
 }
 
-func fillBasicDataToMongo(groups []*db.Group, users db.UserArray) {
+func fillBasicDataToMongo(groups []*mongo.Group, users mongo.UserArray) {
 
 	session, err := resource.MongoPool.GetSession()
 	if err != nil {
@@ -89,13 +87,13 @@ func TestLoadDataFromDB(t *testing.T) {
 		defer resource.MongoPool.ReturnSession(session, err)
 
 		Convey("fill data to redis", func() {
-			err := dispatcher.FillDataToRedisFromMongo(session, conf.Get("dbName").(string), resource.RedisInstance.RedisDoMulti, resource.RedisInstance.DoScript)
+			err := dispatcher.FillDataToRedisFromMongo(session, conf.Get("dbName").(string), resource.RedisInstance.DoMulti, resource.RedisInstance.DoScript)
 			So(err, ShouldEqual, nil)
 		})
 
 		Convey("get data from redis", func() {
 			for groupID, usersInGroup := range groupUsersMap {
-				usersFromCache, err := lua.GetGroupUsersFromCache(groupID, resource.RedisInstance.DoScript)
+				usersFromCache, err := lua.GetGroupUsers(groupID, resource.RedisInstance.DoScript)
 				panicError(err)
 				// log.Println("src:")
 				// for _, user := range usersInGroup {
@@ -115,7 +113,7 @@ func TestLoadDataFromDB(t *testing.T) {
 func TestNodeRegister(t *testing.T) {
 	Convey("add node", t, func() {
 		for index := range nodes {
-			err := dispatcher.RegisterToNodeCenter(nodes[index], resource.RedisInstance.RedisDo)
+			err := dispatcher.RegisterToNodeCenter(nodes[index], resource.RedisInstance.Do)
 			panicError(err)
 		}
 
@@ -124,11 +122,8 @@ func TestNodeRegister(t *testing.T) {
 			panicError(err)
 			So(niCached.Equal(nodes[index]), ShouldEqual, true)
 		}
-
 	})
-	// Convey("node update", t, func() {
 
-	// })
 	node0 := nodes[0]
 	node1 := nodes[1]
 	node2 := nodes[2]
@@ -149,9 +144,6 @@ func TestNodeRegister(t *testing.T) {
 		dbUsersNull, err := lua.GetGroupUsersOnNode(dbGroups[0].ID, node1.LanHost, resource.RedisInstance.DoScript)
 		panicError(err)
 		So(dbUsersNull, ShouldEqual, nil)
-		// group_id_list, err := lua.GetDispatchedGroupsOfNode(node0.LanHost, resource.RedisInstance.DoScript)
-		// panicError(err)
-		// So(len(group_id_list), ShouldEqual, node0.Max)
 
 		err = dispatcher.RemoveNode(node0.LanHost, resource.RedisInstance.DoScript)
 		panicError(err)
@@ -159,7 +151,7 @@ func TestNodeRegister(t *testing.T) {
 		panicError(err)
 		So(count, ShouldEqual, len(groups))
 
-		err = dispatcher.RegisterToNodeCenter(node0, resource.RedisInstance.RedisDo)
+		err = dispatcher.RegisterToNodeCenter(node0, resource.RedisInstance.Do)
 		panicError(err)
 		err = dispatcher.UpdateNodeCapacity(node0.LanHost, node0.Max, resource.RedisInstance.DoScript)
 		count, err = dispatcher.GetUnloadGroupCount(resource.RedisInstance.DoScript)
@@ -177,14 +169,14 @@ func TestNodeRegister(t *testing.T) {
 		panicError(err)
 		So(count, ShouldEqual, len(groups)-node0.Max)
 
-		err = dispatcher.RegisterToNodeCenter(node1, resource.RedisInstance.RedisDo)
+		err = dispatcher.RegisterToNodeCenter(node1, resource.RedisInstance.Do)
 		panicError(err)
 		err = dispatcher.UpdateNodeCapacity(node1.LanHost, node1.Max, resource.RedisInstance.DoScript)
 		count, err = dispatcher.GetUnloadGroupCount(resource.RedisInstance.DoScript)
 		panicError(err)
 		So(count, ShouldEqual, 0)
 
-		err = dispatcher.RegisterToNodeCenter(node2, resource.RedisInstance.RedisDo)
+		err = dispatcher.RegisterToNodeCenter(node2, resource.RedisInstance.Do)
 		panicError(err)
 		err = dispatcher.UpdateNodeCapacity(node2.LanHost, node2.Max, resource.RedisInstance.DoScript)
 		panicError(err)
@@ -196,13 +188,13 @@ func TestNodeRegister(t *testing.T) {
 		So(count, ShouldEqual, 0)
 	})
 
-	newGroups := []*db.Group{}
+	newGroups := []*mongo.Group{}
 	Convey("new group added", t, func() {
 		for index := 0; index < 4; index++ {
-			newGroups = append(newGroups, &db.Group{ID: fmt.Sprintf("new_group_%d", index), Name: fmt.Sprintf("new_group_name_%d", index)})
+			newGroups = append(newGroups, &mongo.Group{ID: fmt.Sprintf("new_group_%d", index), Name: fmt.Sprintf("new_group_name_%d", index)})
 		}
 		for _, group := range newGroups {
-			err := dispatcher.FillNewGroupToRedis(group, resource.RedisInstance.DoScript)
+			err := lua.FillNewGroupToRedis(group, resource.RedisInstance.DoScript)
 			panicError(err)
 		}
 
@@ -213,7 +205,7 @@ func TestNodeRegister(t *testing.T) {
 	})
 
 	Convey("remove group", t, func() {
-		err := lua.RemoveGroupFromRedis(newGroups[0].ID, resource.RedisInstance.DoScript)
+		err := lua.RemoveGroup(newGroups[0].ID, resource.RedisInstance.DoScript)
 		panicError(err)
 
 		count, err := dispatcher.GetUnloadGroupCount(resource.RedisInstance.DoScript)
@@ -223,29 +215,29 @@ func TestNodeRegister(t *testing.T) {
 
 	Convey("handle login route request", t, func() {
 		for _, group := range groups {
-			wan, err := dispatcher.GetNodeByGroup(group.ID, resource.RedisInstance.DoScript)
+			wan, err := lua.GetNodeByGroup(group.ID, resource.RedisInstance.DoScript)
 			panicError(err)
 			So(wan, ShouldContainSubstring, "wan_")
 		}
 	})
 
 	Convey("reload data from db", t, func() {
-		users = db.UserArray{}
-		groups = []*db.Group{}
-		groupUsersMap = make(map[string]db.UserArray)
+		users = mongo.UserArray{}
+		groups = []*mongo.Group{}
+		groupUsersMap = make(map[string]mongo.UserArray)
 		//prepare some data
 		// 5 groups created, and each group has 3 users
 		for groupIndex := range []int{1, 2, 3, 4, 6} {
-			groups = append(groups, &db.Group{
+			groups = append(groups, &mongo.Group{
 				ID:   fmt.Sprintf("group_id_%d", groupIndex),
 				Name: fmt.Sprintf("group_name_%d", groupIndex),
 			})
 		}
 
 		for _, group := range groups {
-			groupUsersMap[group.ID] = db.UserArray{}
+			groupUsersMap[group.ID] = mongo.UserArray{}
 			for userIndex := range []int{4, 5, 6} {
-				user := &db.User{
+				user := &mongo.User{
 					ID:    fmt.Sprintf("user_id_%d_%s", userIndex, group.ID),
 					Name:  fmt.Sprintf("user_name_%d_%s", userIndex, group.Name),
 					Group: group.ID,
@@ -259,13 +251,13 @@ func TestNodeRegister(t *testing.T) {
 		defer resource.MongoPool.ReturnSession(session, err)
 
 		Convey("fill data to redis", func() {
-			err := dispatcher.FillDataToRedisFromMongo(session, conf.Get("dbName").(string), resource.RedisInstance.RedisDoMulti, resource.RedisInstance.DoScript)
+			err := dispatcher.FillDataToRedisFromMongo(session, conf.Get("dbName").(string), resource.RedisInstance.DoMulti, resource.RedisInstance.DoScript)
 			So(err, ShouldEqual, nil)
 		})
 
 		Convey("get data from redis", func() {
 			for groupID, usersInGroup := range groupUsersMap {
-				usersFromCache, err := lua.GetGroupUsersFromCache(groupID, resource.RedisInstance.DoScript)
+				usersFromCache, err := lua.GetGroupUsers(groupID, resource.RedisInstance.DoScript)
 				panicError(err)
 				// log.Println("src:")
 				// for _, user := range usersInGroup {
@@ -279,7 +271,7 @@ func TestNodeRegister(t *testing.T) {
 				So(usersEqual(usersInGroup, usersFromCache), ShouldEqual, true)
 			}
 		})
-		wan, err := dispatcher.GetNodeByGroup(groups[len(groups)-1].ID, resource.RedisInstance.DoScript)
+		wan, err := lua.GetNodeByGroup(groups[len(groups)-1].ID, resource.RedisInstance.DoScript)
 		panicError(err)
 		So(wan, ShouldContainSubstring, "wan_")
 	})
@@ -295,12 +287,12 @@ func TestCheckNodeStatus(t *testing.T) {
 	})
 }
 
-func usersEqual(src, dest db.UserArray) bool {
+func usersEqual(src, dest mongo.UserArray) bool {
 	if len(src) != len(dest) {
 		return false
 	}
 
-	hasUser := func(users db.UserArray, user *db.User) bool {
+	hasUser := func(users mongo.UserArray, user *mongo.User) bool {
 		for _, u := range users {
 			if u.ID == user.ID && u.Chief == user.Chief && u.Index == user.Index &&
 				u.UserType == user.UserType && u.Gender == user.Gender &&
@@ -334,9 +326,9 @@ func insertDataToDB(session *mgo.Session, dbName, collection string, objs ...int
 	return nil
 }
 
-func insertUsersToDB(session *mgo.Session, dbName string, users db.UserArray) error {
+func insertUsersToDB(session *mgo.Session, dbName string, users mongo.UserArray) error {
 	for _, user := range users {
-		err := insertDataToDB(session, dbName, common.Collection_userinfo, user)
+		err := insertDataToDB(session, dbName, mongo.CollectionUserinfo, user)
 		if err != nil {
 			return err
 		}
@@ -344,9 +336,9 @@ func insertUsersToDB(session *mgo.Session, dbName string, users db.UserArray) er
 	return nil
 }
 
-func insertGroupsToDB(session *mgo.Session, dbName string, groups []*db.Group) error {
+func insertGroupsToDB(session *mgo.Session, dbName string, groups []*mongo.Group) error {
 	for _, group := range groups {
-		if err := insertDataToDB(session, dbName, common.Collection_group, group); err != nil {
+		if err := insertDataToDB(session, dbName, mongo.CollectionGroup, group); err != nil {
 			return err
 		}
 	}

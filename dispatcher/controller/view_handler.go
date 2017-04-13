@@ -3,11 +3,10 @@ package controller
 import (
 	"net/http"
 
-	"xsbPro/chat/dispatcher/dispatcher"
-	"xsbPro/chat/dispatcher/resource"
-	"xsbPro/log"
-
 	"github.com/gin-gonic/gin"
+	"github.com/ssor/chat/dispatcher/dispatcher"
+	"github.com/ssor/chat/dispatcher/resource"
+	"github.com/ssor/log"
 )
 
 func Nodes(c *gin.Context) {

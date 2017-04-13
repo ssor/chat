@@ -2,32 +2,33 @@ package lua
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
-	"xsbPro/chat/lua/scripts"
-	"xsbPro/common"
-	"xsbPro/log"
-	db "xsbPro/xsbdb"
 
-	"github.com/ssor/redigo/redis"
+	"github.com/ssor/chat/lua/scripts"
+	"github.com/ssor/chat/mongo"
+	"github.com/ssor/chat/redis"
+	"github.com/ssor/log"
+	redigo "github.com/ssor/redigo/redis"
 )
 
 // ScriptExecutor : type for execute script
-type ScriptExecutor func(script *common.Script, keysAndArgs ...interface{}) (interface{}, error)
+type ScriptExecutor func(script *redis.Script, keysAndArgs ...interface{}) (interface{}, error)
 
 // RedisDo :
 type RedisDo func(cmd string, args ...interface{}) (interface{}, error)
 
 //GetAllGroups will
 func GetAllGroups(scriptExecutor ScriptExecutor) (interface{}, error) {
-	args := redis.Args{}
+	args := redigo.Args{}
 	return scriptExecutor(luaScripts.Scripts[luaScriptGetAllGroups], args...)
 }
 
 //FillNewGroupToRedis 要将 group 置为 非删除状态
-func FillNewGroupToRedis(group *db.Group, scriptExecutor ScriptExecutor) error {
-	args := redis.Args{}.Add(scripts.ForamtGroupKey(group.ID)).AddFlat(group)
+func FillNewGroupToRedis(group *mongo.Group, scriptExecutor ScriptExecutor) error {
+	args := redigo.Args{}.Add(scripts.ForamtGroupKey(group.ID)).AddFlat(group)
 	res, err := scriptExecutor(luaScripts.Scripts[luaScriptFillNewGroup], args...)
 	if err != nil {
 		log.SysF("FillNewGroupToRedis error: %s", err)
@@ -41,7 +42,7 @@ func FillNewGroupToRedis(group *db.Group, scriptExecutor ScriptExecutor) error {
 
 //ResetGroupsStatusInRedis 将 redis 中的 group 置为删除状态
 func ResetGroupsStatusInRedis(scriptExecutor ScriptExecutor) error {
-	args := redis.Args{}
+	args := redigo.Args{}
 	res, err := scriptExecutor(luaScripts.Scripts[luaScriptResetGroupsStatus], args...)
 	if err != nil {
 		log.SysF("ResetGroupsStatusInRedis error: %s", err)
@@ -55,7 +56,7 @@ func ResetGroupsStatusInRedis(scriptExecutor ScriptExecutor) error {
 
 //AdjustNodeDispatch 由于 group 信息发生变化,对 node 的承载进行微调,尤其原来分配到 node 上的 group 已经被删除的情况下
 func AdjustNodeDispatch(scriptExecutor ScriptExecutor) error {
-	args := redis.Args{}
+	args := redigo.Args{}
 	res, err := scriptExecutor(luaScripts.Scripts[luaScriptAdjustNodeDispatch], args...)
 	if err != nil {
 		log.SysF("AdjustNodeDispatch error: %s", err)
@@ -68,7 +69,7 @@ func AdjustNodeDispatch(scriptExecutor ScriptExecutor) error {
 }
 
 //FillGroupsToRedis  will
-func FillGroupsToRedis(groups []*db.Group, scriptExecutor ScriptExecutor) error {
+func FillGroupsToRedis(groups []*mongo.Group, scriptExecutor ScriptExecutor) error {
 
 	for _, group := range groups {
 		err := FillNewGroupToRedis(group, scriptExecutor)
@@ -80,12 +81,12 @@ func FillGroupsToRedis(groups []*db.Group, scriptExecutor ScriptExecutor) error 
 }
 
 // RemoveUsersFromRedis will
-func RemoveUsersFromRedis(users []string, cmdsExecutor func(*common.RedisCommands) error) error {
+func RemoveUsersFromRedis(users []string, cmdsExecutor func(*redis.Commands) error) error {
 
-	cmds := common.NewRedisCommands(true)
+	cmds := redis.NewCommands(true)
 
 	for _, user := range users {
-		cmds.Add("DEL", redis.Args{}.Add(scripts.FormatUserKey(user)))
+		cmds.Add("DEL", redigo.Args{}.Add(scripts.FormatUserKey(user)))
 	}
 
 	err := cmdsExecutor(cmds)
@@ -94,7 +95,7 @@ func RemoveUsersFromRedis(users []string, cmdsExecutor func(*common.RedisCommand
 
 //ClearUsersInRedis clear users info in redis
 func ClearUsersInRedis(scriptExecutor ScriptExecutor) error {
-	args := redis.Args{}
+	args := redigo.Args{}
 	res, err := scriptExecutor(luaScripts.Scripts[luaScriptClearUsers], args...)
 	// res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_clear_users])
 	if err != nil {
@@ -108,13 +109,13 @@ func ClearUsersInRedis(scriptExecutor ScriptExecutor) error {
 }
 
 // FillUsersToRedis will
-func FillUsersToRedis(users db.UserArray, cmdsExecutor func(*common.RedisCommands) error) error {
+func FillUsersToRedis(users mongo.UserArray, cmdsExecutor func(*redis.Commands) error) error {
 
-	cmds := common.NewRedisCommands(true)
+	cmds := redis.NewCommands(true)
 
 	for _, user := range users {
 		// cmds.Add("HMSET", redis.Args{}.Add(lua.Get_user_key(user.ID)).AddFlat(user)...)
-		cmds.Add("HMSET", redis.Args{}.Add(scripts.FormatUserKey(user.ID)).AddFlat(user)...)
+		cmds.Add("HMSET", redigo.Args{}.Add(scripts.FormatUserKey(user.ID)).AddFlat(user)...)
 	}
 
 	err := cmdsExecutor(cmds)
@@ -122,18 +123,18 @@ func FillUsersToRedis(users db.UserArray, cmdsExecutor func(*common.RedisCommand
 }
 
 // FillGroupUserRelationshipToRedis will
-func FillGroupUserRelationshipToRedis(group string, users []string, cmdsExecutor func(*common.RedisCommands) error) error {
+func FillGroupUserRelationshipToRedis(group string, users []string, cmdsExecutor func(*redis.Commands) error) error {
 
-	cmds := common.NewRedisCommands(true)
+	cmds := redis.NewCommands(true)
 
-	// key := lua.Get_group_user_relation_key(group)
 	key := scripts.FormatGroupUserRelationKey(group)
-	cmds.Add("DEL", redis.Args{}.Add(key))
+	cmds.Add("DEL", redigo.Args{}.Add(key))
 
-	args := redis.Args{}.Add(key)
+	args := redigo.Args{}.Add(key)
 	for _, user := range users {
 		args = args.AddFlat(user)
 	}
+
 	cmds.Add("SADD", args...)
 	err := cmdsExecutor(cmds)
 	return err
@@ -144,7 +145,7 @@ func FillGroupUserRelationshipToRedis(group string, users []string, cmdsExecutor
 // RemoveGroup remove group in redis cache
 func RemoveGroup(group string, scriptExecutor ScriptExecutor) error {
 	// args := redis.Args{}.Add(fmt.Sprintf(key_format_group, group))
-	args := redis.Args{}.Add(scripts.ForamtGroupKey)
+	args := redigo.Args{}.Add(scripts.ForamtGroupKey)
 	res, err := scriptExecutor(luaScripts.Scripts[luaScriptRemoveGroup], args...)
 	if err != nil {
 		log.SysF("RemoveGroupFromRedis error: %s", err)
@@ -159,8 +160,8 @@ func RemoveGroup(group string, scriptExecutor ScriptExecutor) error {
 // func GetGroupUsersFromCache(group string, scriptExecutor ScriptExecutor) (db.UserArray, error) {
 
 // GetGroupUsers return users in group
-func GetGroupUsers(group string, scriptExecutor ScriptExecutor) (db.UserArray, error) {
-	args := redis.Args{}.AddFlat(group)
+func GetGroupUsers(group string, scriptExecutor ScriptExecutor) (mongo.UserArray, error) {
+	args := redigo.Args{}.AddFlat(group)
 	res, err := scriptExecutor(luaScripts.Scripts[luaScriptGetUsersInGroup], args...)
 	if err != nil {
 		log.InfoF("GetGroupUsersFromCache DoScript err: %s", err)
@@ -169,13 +170,13 @@ func GetGroupUsers(group string, scriptExecutor ScriptExecutor) (db.UserArray, e
 	data := res.([]uint8)
 
 	if string(data) == "{}" {
-		return db.UserArray{}, nil
+		return mongo.UserArray{}, nil
 	}
 
 	return unmarshalUsers(data), nil
 }
 
-func unmarshalUsers(data []byte) db.UserArray {
+func unmarshalUsers(data []byte) mongo.UserArray {
 
 	type UserCache struct {
 		ID            string `bson:"_id" redis:"id"`
@@ -208,7 +209,7 @@ func unmarshalUsers(data []byte) db.UserArray {
 		return nil
 	}
 
-	convertUserCacheToUser := func(cache *UserCache) *db.User {
+	convertUserCacheToUser := func(cache *UserCache) *mongo.User {
 		index, err := strconv.Atoi(cache.Index)
 		if err != nil {
 			index = 0
@@ -229,12 +230,12 @@ func unmarshalUsers(data []byte) db.UserArray {
 		if err != nil {
 			chief = false
 		}
-		user := db.NewUser(cache.ID, cache.Phone, cache.Email, cache.Password, cache.Name, "",
+		user := mongo.NewUser(cache.ID, cache.Phone, cache.Email, cache.Password, cache.Name, "",
 			cache.Group, cache.Image, cache.Department, cache.Tag, gender, index, chief, userType, cache.ActiveCode, time.Now().Format(time.RFC3339))
 		user.Actived = actived
 		return user
 	}
-	users := db.UserArray{}
+	users := mongo.UserArray{}
 	for _, cache := range usersCache {
 		users = append(users, convertUserCacheToUser(cache))
 	}
@@ -243,7 +244,7 @@ func unmarshalUsers(data []byte) db.UserArray {
 
 //GetNodeByGroup 通过 group 和 node 的对应,找到 group 分配到的节点
 func GetNodeByGroup(group string, scriptExecutor ScriptExecutor) (wan string, e error) {
-	args := redis.Args{}.Add(scripts.ForamtGroupKey(group))
+	args := redigo.Args{}.Add(scripts.ForamtGroupKey(group))
 	res, err := scriptExecutor(luaScripts.Scripts[luaScriptGetNodeByGroup], args...)
 	if err != nil {
 		return "", err
@@ -253,16 +254,16 @@ func GetNodeByGroup(group string, scriptExecutor ScriptExecutor) (wan string, e 
 }
 
 // GetGroupsOnNode return all groups on node
-func GetGroupsOnNode(lan string, scriptExecutor ScriptExecutor) ([]*db.Group, error) {
+func GetGroupsOnNode(lan string, scriptExecutor ScriptExecutor) ([]*mongo.Group, error) {
 	// node_key := Format_nodeinfo_key(lan)
 	nodeKey := scripts.FormatNodeInfoKey(lan)
-	args := redis.Args{}.Add(nodeKey)
+	args := redigo.Args{}.Add(nodeKey)
 	res, err := scriptExecutor(luaScripts.Scripts[luaScriptGetGroupsOnNode], args...)
 	if err != nil {
 		log.SysF("GetGroupsOnNode error: %s", err)
 		return nil, err
 	}
-	var groups []*db.Group
+	var groups []*mongo.Group
 	err = json.Unmarshal(res.([]uint8), &groups)
 	if err != nil {
 		log.InfoF("data: %s", string(res.([]uint8)))
@@ -273,14 +274,14 @@ func GetGroupsOnNode(lan string, scriptExecutor ScriptExecutor) ([]*db.Group, er
 
 // GetAllNodes will
 func GetAllNodes(scriptExecutor ScriptExecutor) (interface{}, error) {
-	return scriptExecutor(luaScripts.Scripts[luaScriptGetAllNodes], redis.Args{})
+	return scriptExecutor(luaScripts.Scripts[luaScriptGetAllNodes], redigo.Args{})
 }
 
 // GetGroupUsersOnNode return users of group
 // the group must be dispatched to specified node, or no data should be returned
-func GetGroupUsersOnNode(group, nodeLan string, scriptExecutor ScriptExecutor) (db.UserArray, error) {
+func GetGroupUsersOnNode(group, nodeLan string, scriptExecutor ScriptExecutor) (mongo.UserArray, error) {
 
-	args := redis.Args{}.AddFlat(scripts.ForamtGroupKey(group)).AddFlat(scripts.FormatNodeInfoKey(nodeLan)).AddFlat(group)
+	args := redigo.Args{}.AddFlat(scripts.ForamtGroupKey(group)).AddFlat(scripts.FormatNodeInfoKey(nodeLan)).AddFlat(group)
 	res, err := scriptExecutor(luaScripts.Scripts[luaScriptGetGroupUsersOnNode], args...)
 	if err != nil {
 		log.SysF("GetGroupUsersOnNode error: %s", err)
@@ -305,14 +306,14 @@ func GetGroupUsersOnNode(group, nodeLan string, scriptExecutor ScriptExecutor) (
 //GetNodeInfo will
 func GetNodeInfo(nodeID string, scriptExecutor ScriptExecutor) (interface{}, error) {
 	nodeKey := scripts.FormatNodeInfoKey(nodeID)
-	return scriptExecutor(luaScripts.Scripts[luaScriptGetNodeInfo], redis.Args{}.Add(nodeKey)...)
+	return scriptExecutor(luaScripts.Scripts[luaScriptGetNodeInfo], redigo.Args{}.Add(nodeKey)...)
 }
 
 // GetAllNodeKeys will
 func GetAllNodeKeys(redisDo RedisDo) ([]string, error) {
-	nodeKeys, err := redis.Strings(redisDo("keys", scripts.FormatNodeInfoKey("*")))
+	nodeKeys, err := redigo.Strings(redisDo("keys", scripts.FormatNodeInfoKey("*")))
 	if err != nil {
-		if err == redis.ErrNil {
+		if err == redigo.ErrNil {
 			return []string{}, nil
 		}
 		return nil, err
@@ -324,7 +325,7 @@ func GetAllNodeKeys(redisDo RedisDo) ([]string, error) {
 // NodeExists will
 func NodeExists(lan string, redisDo RedisDo) bool {
 
-	res, err := redisDo("EXISTS", redis.Args{}.Add(scripts.FormatNodeInfoKey(lan))...)
+	res, err := redisDo("EXISTS", redigo.Args{}.Add(scripts.FormatNodeInfoKey(lan))...)
 	if err != nil {
 		log.SysF("NodeExists error: %s", err)
 		return false
@@ -338,7 +339,7 @@ func NodeExists(lan string, redisDo RedisDo) bool {
 // RemoveNode will
 func RemoveNode(lan string, scriptExecutor ScriptExecutor) error {
 	nodeKey := scripts.FormatNodeInfoKey(lan)
-	args := redis.Args{}.Add(nodeKey)
+	args := redigo.Args{}.Add(nodeKey)
 	res, err := scriptExecutor(luaScripts.Scripts[luaScriptRemoveNode], args...)
 	if err != nil {
 		return err
@@ -353,7 +354,7 @@ func RemoveNode(lan string, scriptExecutor ScriptExecutor) error {
 func UpdateNodeCapacity(ip string, cap int, scriptExecutor ScriptExecutor) error {
 	if len(ip) > 0 {
 		nodeKey := scripts.FormatNodeInfoKey(ip)
-		args := redis.Args{}.Add(nodeKey).AddFlat(cap)
+		args := redigo.Args{}.Add(nodeKey).AddFlat(cap)
 		res, err := scriptExecutor(luaScripts.Scripts[luaScriptUpdateNodeCapability], args...)
 		if err != nil {
 			log.SysF("updateNodeCapacity error: %s", err)
@@ -369,12 +370,25 @@ func UpdateNodeCapacity(ip string, cap int, scriptExecutor ScriptExecutor) error
 
 //GetUnloadGroupCount will
 func GetUnloadGroupCount(scriptExecutor ScriptExecutor) (int, error) {
-	res, err := scriptExecutor(luaScripts.Scripts[luaScriptGetUnloadGroupCount], redis.Args{})
+	res, err := scriptExecutor(luaScripts.Scripts[luaScriptGetUnloadGroupCount], redigo.Args{})
 	if err != nil {
 		return 0, err
 	}
 
 	return int(res.(int64)), nil
+}
+
+func GetNodeInfoByKey(nodeKey string, scriptExecutor ScriptExecutor) ([]byte, error) {
+	var err error
+	res, err := scriptExecutor(luaScripts.Scripts[scripts.GetNodeInfo], redigo.Args{}.Add(nodeKey)...)
+	if err != nil {
+		log.SysF("GetNodeInfoByKey error: %s", err)
+		return nil, err
+	}
+	if res == nil {
+		return nil, errors.New("noData")
+	}
+	return res.([]byte), nil
 }
 
 // type luaFunc struct {

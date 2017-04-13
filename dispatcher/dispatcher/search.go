@@ -1,12 +1,11 @@
 package dispatcher
 
 import (
-	"xsbPro/chat/lua"
-	"xsbPro/log"
-
 	"encoding/json"
-
 	"strings"
+
+	"github.com/ssor/chat/lua"
+	"github.com/ssor/log"
 )
 
 type SearchResult struct {

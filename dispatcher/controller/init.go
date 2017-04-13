@@ -1,18 +1,17 @@
 package controller
 
 import (
-	"xsbPro/chat/dispatcher/dispatcher"
-	"xsbPro/chat/dispatcher/resource"
-	"xsbPro/chat/lua"
-	"xsbPro/common"
-	"xsbPro/log"
-
 	"encoding/json"
 	"sync"
 	"time"
 
 	nsq "github.com/nsqio/go-nsq"
+	"github.com/ssor/chat/dispatcher/dispatcher"
+	"github.com/ssor/chat/dispatcher/resource"
+	"github.com/ssor/chat/lua"
+	"github.com/ssor/chat/redis"
 	"github.com/ssor/config"
+	"github.com/ssor/log"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -40,9 +39,9 @@ func Init(c config.IConfigInfo) {
 	//6. 人员信息更新    -> 更新人员信息
 	//7. 人员删除       -> 移除人员信息,更新人员和支部关系
 
-	startNsqConsumer(conf.Get("nsqHost").(string), common.NSQ_topic_group, nsq.HandlerFunc(updateGroup))
-	startNsqConsumer(conf.Get("nsqHost").(string), common.NSQ_topic_user, nsq.HandlerFunc(updateUser))
-	startNsqConsumer(conf.Get("nsqHost").(string), common.NSQ_topic_users_of_group_update, nsq.HandlerFunc(updateUsersOfGroup))
+	startNsqConsumer(conf.Get("nsqHost").(string), nsqTopicGroup, nsq.HandlerFunc(updateGroup))
+	startNsqConsumer(conf.Get("nsqHost").(string), nsqTopicUser, nsq.HandlerFunc(updateUser))
+	startNsqConsumer(conf.Get("nsqHost").(string), nsqTopicUsersOfGroupUpdate, nsq.HandlerFunc(updateUsersOfGroup))
 
 }
 
@@ -76,7 +75,7 @@ func updateUsersOfGroup(msg *nsq.Message) error {
 	return nil
 }
 
-func updateUsersOfGroupToDB(dbName, group string, cmdsExecutor func(*common.RedisCommands) error) error {
+func updateUsersOfGroupToDB(dbName, group string, cmdsExecutor func(*redis.RedisCommands) error) error {
 	waitForDbConnection.Lock()
 	defer waitForDbConnection.Unlock()
 
@@ -123,7 +122,7 @@ func updateUser(msg *nsq.Message) error {
 	return nil
 }
 
-func updateUserToDB(dbName string, query interface{}, cmdsExecutor func(*common.RedisCommands) error) error {
+func updateUserToDB(dbName string, query interface{}, cmdsExecutor func(*redis.RedisCommands) error) error {
 	waitForDbConnection.Lock()
 	defer waitForDbConnection.Unlock()
 
@@ -176,7 +175,7 @@ func updateGroup(msg *nsq.Message) error {
 	return nil
 }
 
-func addNewGroupToDB(dbName, groupID string, cmdsExecutor func(*common.RedisCommands) error, scriptExecutor dispatcher.ScriptExecutor) error {
+func addNewGroupToDB(dbName, groupID string, cmdsExecutor func(*redis.RedisCommands) error, scriptExecutor dispatcher.ScriptExecutor) error {
 	waitForDbConnection.Lock()
 	defer waitForDbConnection.Unlock()
 

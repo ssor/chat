@@ -2,10 +2,10 @@ package dispatcher
 
 import (
 	"strings"
-	"xsbPro/chat/lua"
-	"xsbPro/log"
 
 	"github.com/parnurzeal/gorequest"
+	"github.com/ssor/chat/lua"
+	"github.com/ssor/log"
 	"github.com/ssor/redigo/redis"
 )
 
@@ -49,47 +49,17 @@ func RegisterToNodeCenter(node_info *NodeInfo, redisDo func(cmd string, args ...
 	return nil
 }
 
-// func RemoveNode(lan string, scriptExecutor ScriptExecutor) error {
-// 	node_key := lua.Format_nodeinfo_key(lan)
-// 	args := redis.Args{}.Add(node_key)
-// 	res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_remove_node], args...)
-// 	if err != nil {
-// 		log.SysF("RemoveNode error: %s", err)
-// 		return err
-// 	}
-// 	if string(res.([]uint8)) != "OK" {
-// 		return fmt.Errorf("RemoveNode failed")
-// 	}
-// 	return nil
-// }
+func RemoveNode(lan string, scriptExecutor ScriptExecutor) error {
+	return lua.RemoveNode(lan, lua.ScriptExecutor(scriptExecutor))
+}
 
-// func UpdateNodeCapacity(ip string, cap int, scriptExecutor ScriptExecutor) error {
-// 	if len(ip) > 0 {
+func UpdateNodeCapacity(ip string, cap int, scriptExecutor ScriptExecutor) error {
+	return lua.UpdateNodeCapacity(ip, cap, lua.ScriptExecutor(scriptExecutor))
+}
 
-// 		node_key := lua.Format_nodeinfo_key(ip)
-// 		args := redis.Args{}.Add(node_key).AddFlat(cap)
-// 		res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_update_node_capability], args...)
-// 		if err != nil {
-// 			log.SysF("updateNodeCapacity error: %s", err)
-// 			return err
-// 		}
-// 		if string(res.([]uint8)) != "OK" {
-// 			return fmt.Errorf("update cap failed")
-// 		}
-// 		log.InfoF("node %s capacity updated to %d", ip, cap)
-// 	}
-// 	return nil
-// }
-
-// func GetUnloadGroupCount(scriptExecutor ScriptExecutor) (int, error) {
-// 	res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_get_unload_group_count], redis.Args{})
-// 	if err != nil {
-// 		log.SysF("GetUnloadGroupCount error: %s", err)
-// 		return 0, err
-// 	}
-
-// 	return int(res.(int64)), nil
-// }
+func GetUnloadGroupCount(scriptExecutor ScriptExecutor) (int, error) {
+	return lua.GetUnloadGroupCount(lua.ScriptExecutor(scriptExecutor))
+}
 
 // //如果指定节点,则分配到该节点
 // func (nm *NodeManager) newGroupRequest(group, lan string) {

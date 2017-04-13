@@ -4,24 +4,25 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"xsbPro/common"
+
+	"github.com/ssor/chat/redis"
 )
 
 type luaScriptSet struct {
-	Scripts map[string]*common.Script
+	Scripts map[string]*redis.Script
 }
 
 func newLuaScriptSet() *luaScriptSet {
 	return &luaScriptSet{
-		Scripts: make(map[string]*common.Script),
+		Scripts: make(map[string]*redis.Script),
 	}
 }
 
 func (lss *luaScriptSet) Add(name string, keyCount int, src string) error {
-	script := common.NewScript(keyCount, src)
+	script := redis.NewScript(keyCount, src)
 	return lss.AddScript(name, script)
 }
-func (lss *luaScriptSet) AddScript(name string, script *common.Script) error {
+func (lss *luaScriptSet) AddScript(name string, script *redis.Script) error {
 	if _, exists := lss.Scripts[name]; exists {
 		return errors.New("alreay exists")
 	}
@@ -30,7 +31,7 @@ func (lss *luaScriptSet) AddScript(name string, script *common.Script) error {
 	return nil
 }
 
-func (lss *luaScriptSet) Load(loader func(*common.Script) error) error {
+func (lss *luaScriptSet) Load(loader func(*redis.Script) error) error {
 
 	for name, script := range lss.Scripts {
 		err := loader(script)

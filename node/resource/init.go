@@ -1,11 +1,12 @@
 package resource
 
 import (
-	"xsbPro/common"
+	"github.com/ssor/chat/redis"
+	"github.com/ssor/config"
 )
 
 var (
-	RedisInstance *common.Redis_Instance
+	RedisInstance *redis.Instance
 )
 
 func init() {
@@ -13,8 +14,8 @@ func init() {
 }
 
 // Init init resource
-func Init(conf common.IConfigInfo) {
-	RedisInstance = common.InitRedisInstance(conf.GetRedisHost())
+func Init(conf config.IConfigInfo) {
+	RedisInstance = redis.NewInstance(conf.Get("redisHost").(string))
 	if RedisInstance == nil {
 		panic("init redis instance failed")
 	}

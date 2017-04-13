@@ -3,15 +3,14 @@ package dispatcher
 import (
 	"fmt"
 	"time"
-	"xsbPro/chat/dispatcher/resource"
-	"xsbPro/chat/lua"
-	"xsbPro/common"
-	"xsbPro/log"
-	db "xsbPro/xsbdb"
 
 	"github.com/parnurzeal/gorequest"
+	"github.com/ssor/chat/dispatcher/resource"
+	"github.com/ssor/chat/lua"
+	"github.com/ssor/chat/mongo"
+	"github.com/ssor/chat/redis"
 	"github.com/ssor/config"
-
+	"github.com/ssor/log"
 	mgo "gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
@@ -77,12 +76,12 @@ func NotifyNodeDataRefresh(opt, para string, redisDo RedisDo) error {
 	return nil
 }
 
-// func ClearHistoryData(cleaner func() error) {
-// 	err := cleaner()
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// }
+func ClearHistoryData(cleaner func() error) {
+	err := cleaner()
+	if err != nil {
+		panic(err)
+	}
+}
 
 //整理
 func prepareDataInRedis(_conf config.IConfigInfo) {
@@ -92,14 +91,15 @@ func prepareDataInRedis(_conf config.IConfigInfo) {
 		panic("mongo conn err: " + err.Error())
 	}
 	defer resource.MongoPool.ReturnSession(session, err)
-	err = FillDataToRedisFromMongo(session, _conf.Get("dbName").(string), resource.RedisInstance.RedisDoMulti, resource.RedisInstance.DoScript)
+
+	err = FillDataToRedisFromMongo(session, _conf.Get("dbName").(string), resource.RedisInstance.DoMulti, resource.RedisInstance.DoScript)
 	if err != nil {
 		panic(err)
 	}
 }
 
 // //要将 group 置为 非删除状态
-// func FillNewGroupToRedis(group *db.Group, scriptExecutor ScriptExecutor) error {
+// func FillNewGroupToRedis(group *mongo.Group, scriptExecutor ScriptExecutor) error {
 // 	args := redis.Args{}.Add(lua.Get_group_key(group.ID)).AddFlat(group)
 // 	res, err := scriptExecutor(lua.Lua_scripts.Scripts[lua.Lua_script_fill_new_group], args...)
 // 	if err != nil {
@@ -140,9 +140,9 @@ func prepareDataInRedis(_conf config.IConfigInfo) {
 // 	return nil
 // }
 
-// func FillGroupsToRedis(groups []*db.Group, cmdsExecutor func(*common.RedisCommands) error) error {
+// func FillGroupsToRedis(groups []*mongo.Group, cmdsExecutor func(*common.RedisCommands) error) error {
 
-// func FillGroupsToRedis(groups []*db.Group, scriptExecutor ScriptExecutor) error {
+// func FillGroupsToRedis(groups []*mongo.Group, scriptExecutor ScriptExecutor) error {
 
 // 	for _, group := range groups {
 // 		err := FillNewGroupToRedis(group, scriptExecutor)
@@ -193,13 +193,13 @@ func prepareDataInRedis(_conf config.IConfigInfo) {
 // }
 
 // UpdateUsersOfGroup will
-func UpdateUsersOfGroup(session *mgo.Session, dbName string, group string, cmdsExecutor func(*common.RedisCommands) error) error {
+func UpdateUsersOfGroup(session *mgo.Session, dbName string, group string, cmdsExecutor func(*redis.Commands) error) error {
 	//支部中用户信息数据重新填充
 	users, err := getUsersFromDB(session, dbName, bson.M{"group": group})
 	if err != nil {
 		return err
 	}
-	getIDofUsers := func(users db.UserArray) []string {
+	getIDofUsers := func(users mongo.UserArray) []string {
 		l := []string{}
 		for _, user := range users {
 			l = append(l, user.ID)
@@ -230,7 +230,7 @@ func UpdateUsersOfGroup(session *mgo.Session, dbName string, group string, cmdsE
 // }
 
 //FillDataToRedisFromMongo 每次载入数据,将 redis 中数据与 mongo 数据进行比对,完成后,检查分配信息,调整 node的实际承载量,需要的话,进行新的分配
-func FillDataToRedisFromMongo(session *mgo.Session, dbName string, cmdsExecutor func(*common.RedisCommands) error, scriptExecutor ScriptExecutor) error {
+func FillDataToRedisFromMongo(session *mgo.Session, dbName string, cmdsExecutor func(*redis.Commands) error, scriptExecutor ScriptExecutor) error {
 	groups, err := getGroupsFromDB(session, dbName, nil)
 	if err != nil {
 		return err
@@ -265,8 +265,8 @@ func FillDataToRedisFromMongo(session *mgo.Session, dbName string, cmdsExecutor 
 		return err
 	}
 
-	getGroupUsers := func(group *db.Group, users db.UserArray) db.UserArray {
-		usersInGroup := db.UserArray{}
+	getGroupUsers := func(group *mongo.Group, users mongo.UserArray) mongo.UserArray {
+		usersInGroup := mongo.UserArray{}
 		for _, user := range users {
 			if user.Group == group.ID {
 				usersInGroup = append(usersInGroup, user)
@@ -274,7 +274,7 @@ func FillDataToRedisFromMongo(session *mgo.Session, dbName string, cmdsExecutor 
 		}
 		return usersInGroup
 	}
-	getIDofUsers := func(users db.UserArray) []string {
+	getIDofUsers := func(users mongo.UserArray) []string {
 		l := []string{}
 		for _, user := range users {
 			l = append(l, user.ID)
@@ -293,7 +293,7 @@ func FillDataToRedisFromMongo(session *mgo.Session, dbName string, cmdsExecutor 
 }
 
 // AddUsers get user info from mongo and fill it to redis
-func AddUsers(session *mgo.Session, dbName string, query interface{}, cmdsExecutor func(*common.RedisCommands) error) error {
+func AddUsers(session *mgo.Session, dbName string, query interface{}, cmdsExecutor func(*redis.Commands) error) error {
 	users, err := getUsersFromDB(session, dbName, query)
 	if err != nil {
 		return err
@@ -305,14 +305,14 @@ func AddUsers(session *mgo.Session, dbName string, query interface{}, cmdsExecut
 	return nil
 }
 
-func getUsersFromDB(session *mgo.Session, dbName string, query interface{}) (db.UserArray, error) {
+func getUsersFromDB(session *mgo.Session, dbName string, query interface{}) (mongo.UserArray, error) {
 
 	if session == nil {
 		return nil, fmt.Errorf("db session should not be nil")
 	}
 
-	var users db.UserArray
-	err := session.DB(dbName).C(common.Collection_userinfo).Find(query).All(&users)
+	var users mongo.UserArray
+	err := session.DB(dbName).C(mongo.CollectionUserinfo).Find(query).All(&users)
 	if err != nil {
 		log.SysF("getUsersFromDB error: %s", err)
 		return nil, err
@@ -321,14 +321,14 @@ func getUsersFromDB(session *mgo.Session, dbName string, query interface{}) (db.
 	return users, nil
 }
 
-func getGroupsFromDB(session *mgo.Session, dbName string, query interface{}) ([]*db.Group, error) {
+func getGroupsFromDB(session *mgo.Session, dbName string, query interface{}) ([]*mongo.Group, error) {
 
 	if session == nil {
 		return nil, fmt.Errorf("db session should not be nil")
 	}
 
-	var groups []*db.Group
-	err := session.DB(dbName).C(common.Collection_group).Find(query).All(&groups)
+	var groups []*mongo.Group
+	err := session.DB(dbName).C(mongo.CollectionGroup).Find(query).All(&groups)
 	if err != nil {
 		log.SysF("GetGroupsFromDB error: %s", err)
 		return nil, err
@@ -338,7 +338,7 @@ func getGroupsFromDB(session *mgo.Session, dbName string, query interface{}) ([]
 }
 
 // AddNewGroup get group info including users in group and fill it to redis
-func AddNewGroup(session *mgo.Session, dbName, groupID string, cmdsExecutor func(*common.RedisCommands) error, scriptExecutor ScriptExecutor) error {
+func AddNewGroup(session *mgo.Session, dbName, groupID string, cmdsExecutor func(*redis.Commands) error, scriptExecutor ScriptExecutor) error {
 	groups, err := getGroupsFromDB(session, dbName, bson.M{"_id": groupID})
 	if err != nil {
 		log.SysF("get group from db err: %s", err)
@@ -360,7 +360,7 @@ func AddNewGroup(session *mgo.Session, dbName, groupID string, cmdsExecutor func
 	if err != nil {
 		return err
 	}
-	getIDofUsers := func(users db.UserArray) []string {
+	getIDofUsers := func(users mongo.UserArray) []string {
 		l := []string{}
 		for _, user := range users {
 			l = append(l, user.ID)
@@ -374,4 +374,4 @@ func AddNewGroup(session *mgo.Session, dbName, groupID string, cmdsExecutor func
 	return nil
 }
 
-type ScriptExecutor func(script *common.Script, keysAndArgs ...interface{}) (interface{}, error)
+type ScriptExecutor func(script *redis.Script, keysAndArgs ...interface{}) (interface{}, error)
